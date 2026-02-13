@@ -8,11 +8,45 @@ export type ComponentFramework = z.infer<typeof ComponentFrameworkSchema>;
 export const ComponentStylingSchema = z.literal("tailwind");
 export type ComponentStyling = z.infer<typeof ComponentStylingSchema>;
 
-export const ComponentKindSchema = z.enum(["primitive", "composite", "hook", "utility"]);
-export type ComponentKind = z.infer<typeof ComponentKindSchema>;
-
-export const ComponentMotionSchema = z.enum(["none", "minimal", "animated"]);
+export const ComponentMotionSchema = z.enum(["none", "minimal", "standard", "heavy"]);
 export type ComponentMotion = z.infer<typeof ComponentMotionSchema>;
+
+export const ComponentTopicSchema = z.enum([
+  "action",
+  "selection",
+  "toggle",
+  "confirmation",
+  "destructive",
+  "disclosure",
+  "input",
+  "form",
+  "validation",
+  "authentication",
+  "date-time",
+  "navigation",
+  "menu",
+  "command-palette",
+  "breadcrumb",
+  "pagination",
+  "overlay",
+  "modal",
+  "popover",
+  "drawer",
+  "tooltip",
+  "feedback",
+  "status",
+  "notification",
+  "loading",
+  "progress",
+  "empty-state",
+  "data-display",
+  "data-visualization",
+  "layout",
+  "scrolling",
+  "resizable",
+  "keyboard",
+]);
+export type ComponentTopic = z.infer<typeof ComponentTopicSchema>;
 
 export const ComponentSourceSchema = z
   .object({
@@ -27,7 +61,6 @@ export type ComponentSource = z.infer<typeof ComponentSourceSchema>;
 export const ComponentConstraintsSchema = z
   .object({
     motion: ComponentMotionSchema.optional(),
-    usesPortal: z.boolean().optional(),
   })
   .strict();
 export type ComponentConstraints = z.infer<typeof ComponentConstraintsSchema>;
@@ -44,7 +77,6 @@ export const ComponentDocumentSchema = z
   .object({
     id: NonEmptyTextSchema,
     name: NonEmptyTextSchema,
-    kind: ComponentKindSchema.optional(),
     source: ComponentSourceSchema,
     framework: ComponentFrameworkSchema,
     styling: ComponentStylingSchema,
@@ -52,7 +84,7 @@ export const ComponentDocumentSchema = z
     intent: NonEmptyTextSchema,
     capabilities: z.array(NonEmptyTextSchema).default([]),
     synonyms: z.array(NonEmptyTextSchema).default([]),
-    topics: z.array(NonEmptyTextSchema).default([]),
+    topics: z.array(ComponentTopicSchema).default([]),
     constraints: ComponentConstraintsSchema.optional(),
     code: ComponentCodeSchema,
   })

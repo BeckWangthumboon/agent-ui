@@ -7,7 +7,9 @@
     "cli": "bun run src/cli.ts",
     "search": "bun run src/cli.ts search",
     "show": "bun run src/cli.ts show",
-    "validate": "bun run src/cli.ts validate"
+    "validate": "bun run src/cli.ts validate",
+    "export:csv": "bun run scripts/components-data/export-to-csv.ts",
+    "import:csv": "bun run scripts/components-data/import-from-csv.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
