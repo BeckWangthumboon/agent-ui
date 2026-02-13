@@ -1,5 +1,3 @@
-import type { ComponentDependency, ComponentDocument } from "./types";
-
 type UnknownRecord = Record<string, unknown>;
 
 export function isRecord(value: unknown): value is UnknownRecord {
@@ -39,51 +37,4 @@ export function normalizeStringArray(values: string[]): string[] {
   }
 
   return normalized;
-}
-
-export function normalizeDependencies(dependencies: ComponentDependency[]): ComponentDependency[] {
-  const seen = new Set<string>();
-  const normalized: ComponentDependency[] = [];
-
-  for (const dependency of dependencies) {
-    const name = normalizeText(dependency.name);
-    if (name.length === 0) {
-      continue;
-    }
-
-    const version = normalizeOptionalText(dependency.version);
-    const key = `${name.toLowerCase()}@${version?.toLowerCase() ?? ""}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    normalized.push(version ? { name, version } : { name });
-  }
-
-  return normalized;
-}
-
-export function normalizeDocument(document: ComponentDocument): ComponentDocument {
-  return {
-    ...document,
-    id: normalizeText(document.id),
-    name: normalizeText(document.name),
-    description: normalizeOptionalText(document.description),
-    source: {
-      ...document.source,
-      repo: normalizeOptionalText(document.source.repo),
-      author: normalizeOptionalText(document.source.author),
-      license: normalizeOptionalText(document.source.license),
-      url: normalizeText(document.source.url),
-    },
-    tags: normalizeStringArray(document.tags),
-    useCases: normalizeStringArray(document.useCases),
-    dependencies: normalizeDependencies(document.dependencies),
-    code: {
-      fileName: normalizeText(document.code.fileName),
-      content: document.code.content,
-    },
-  };
 }

@@ -1,12 +1,13 @@
 import Fuse from "fuse.js";
 
-import type { ComponentDocument, ComponentFramework, ComponentStyling } from "../types";
+import type { ComponentDocument, ComponentFramework, ComponentMotion, ComponentStyling } from "../types";
 import { DEFAULT_SEARCH_LIMIT, FUSE_OPTIONS } from "./config";
 
 export type SearchFilters = {
-  tags?: string[];
+  topics?: string[];
   framework?: ComponentFramework;
   styling?: ComponentStyling;
+  motion?: ComponentMotion;
 };
 
 export type SearchOptions = SearchFilters & {
@@ -65,13 +66,16 @@ export class ComponentSearchEngine {
   }
 
   private filterDocuments(filters: SearchFilters): ComponentDocument[] {
-    const requestedTags = (filters.tags ?? []).map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0);
+    const requestedTopics = (filters.topics ?? [])
+      .map((topic) => topic.trim().toLowerCase())
+      .filter((topic) => topic.length > 0);
 
     const hasFrameworkFilter = Boolean(filters.framework);
     const hasStylingFilter = Boolean(filters.styling);
-    const hasTagFilter = requestedTags.length > 0;
+    const hasTopicFilter = requestedTopics.length > 0;
+    const hasMotionFilter = Boolean(filters.motion);
 
-    if (!hasFrameworkFilter && !hasStylingFilter && !hasTagFilter) {
+    if (!hasFrameworkFilter && !hasStylingFilter && !hasTopicFilter && !hasMotionFilter) {
       return this.documents;
     }
 
@@ -84,12 +88,16 @@ export class ComponentSearchEngine {
         return false;
       }
 
-      if (!hasTagFilter) {
+      if (filters.motion && document.constraints?.motion !== filters.motion) {
+        return false;
+      }
+
+      if (!hasTopicFilter) {
         return true;
       }
 
-      const documentTags = new Set(document.tags.map((tag) => tag.toLowerCase()));
-      return requestedTags.every((tag) => documentTags.has(tag));
+      const documentTopics = new Set(document.topics.map((topic) => topic.toLowerCase()));
+      return requestedTopics.every((topic) => documentTopics.has(topic));
     });
   }
 }

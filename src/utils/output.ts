@@ -23,12 +23,14 @@ export function printSearchResults(results: ComponentSearchResult[]): void {
 
     console.log(`${rank}. [${score}] ${document.name} (${document.id})`);
 
-    if (document.description) {
-      console.log(`    ${document.description}`);
+    console.log(`    intent: ${document.intent}`);
+
+    if (document.topics.length > 0) {
+      console.log(`    topics: ${document.topics.join(", ")}`);
     }
 
-    if (document.tags.length > 0) {
-      console.log(`    tags: ${document.tags.join(", ")}`);
+    if (document.constraints?.motion) {
+      console.log(`    motion: ${document.constraints.motion}`);
     }
 
     console.log(`    source: ${document.source.url}`);
@@ -38,9 +40,7 @@ export function printSearchResults(results: ComponentSearchResult[]): void {
 export function printComponentDocument(document: ComponentDocument, includeCode: boolean): void {
   console.log(`id: ${document.id}`);
   console.log(`name: ${document.name}`);
-  if (document.description) {
-    console.log(`description: ${document.description}`);
-  }
+  console.log(`intent: ${document.intent}`);
 
   console.log(`framework: ${document.framework}`);
   console.log(`styling: ${document.styling}`);
@@ -58,20 +58,24 @@ export function printComponentDocument(document: ComponentDocument, includeCode:
     console.log(`source.license: ${document.source.license}`);
   }
 
-  if (document.tags.length > 0) {
-    console.log(`tags: ${document.tags.join(", ")}`);
+  if (document.topics.length > 0) {
+    console.log(`topics: ${document.topics.join(", ")}`);
   }
 
-  if (document.useCases.length > 0) {
-    console.log(`useCases: ${document.useCases.join(", ")}`);
+  if (document.capabilities.length > 0) {
+    console.log(`capabilities: ${document.capabilities.join(", ")}`);
+  }
+
+  if (document.synonyms.length > 0) {
+    console.log(`synonyms: ${document.synonyms.join(", ")}`);
+  }
+
+  if (document.constraints?.motion) {
+    console.log(`constraints.motion: ${document.constraints.motion}`);
   }
 
   if (document.dependencies.length > 0) {
-    console.log("dependencies:");
-    for (const dependency of document.dependencies) {
-      const value = dependency.version ? `${dependency.name}@${dependency.version}` : dependency.name;
-      console.log(`  - ${value}`);
-    }
+    console.log(`dependencies: ${document.dependencies.join(", ")}`);
   }
 
   console.log(`code.fileName: ${document.code.fileName}`);

@@ -3,7 +3,14 @@ import { Command } from "commander";
 import { runSearchCommand } from "./commands/search";
 import { runShowCommand } from "./commands/show";
 import { runValidateCommand } from "./commands/validate";
-import type { ComponentFramework, ComponentStyling } from "./types";
+import {
+  ComponentMotionSchema,
+  ComponentTopicSchema,
+  type ComponentFramework,
+  type ComponentMotion,
+  type ComponentStyling,
+  type ComponentTopic,
+} from "./types";
 
 const program = new Command();
 
@@ -19,18 +26,20 @@ program
   .argument("<query>", "Search query")
   .option("-d, --data-dir <path>", "Component data directory", "data/components")
   .option("-l, --limit <number>", "Maximum number of results", parsePositiveInteger, 10)
-  .option("-t, --tag <tag>", "Filter by tag (repeatable)", collectRepeatedOption, [] as string[])
+  .option("-t, --topic <topic>", "Filter by topic (repeatable)", collectTopicOption, [] as ComponentTopic[])
   .option("--framework <framework>", "Filter by framework", parseFramework)
   .option("--styling <styling>", "Filter by styling", parseStyling)
+  .option("--motion <motion>", "Filter by motion level", parseMotion)
   .option("--json", "Output JSON", false)
   .action(async (query: string, options: SearchCliOptions) => {
     await runSearchCommand(query, {
       dataDir: options.dataDir,
       limit: options.limit,
       json: Boolean(options.json),
-      tags: options.tag,
+      topics: options.topic,
       framework: options.framework,
       styling: options.styling,
+      motion: options.motion,
     });
   });
 
@@ -68,9 +77,10 @@ await program.parseAsync(process.argv);
 type SearchCliOptions = {
   dataDir: string;
   limit: number;
-  tag: string[];
+  topic: ComponentTopic[];
   framework?: ComponentFramework;
   styling?: ComponentStyling;
+  motion?: ComponentMotion;
   json?: boolean;
 };
 
@@ -86,8 +96,8 @@ type ValidateCliOptions = {
   json?: boolean;
 };
 
-function collectRepeatedOption(value: string, previous: string[]): string[] {
-  return [...previous, value];
+function collectTopicOption(value: string, previous: ComponentTopic[]): ComponentTopic[] {
+  return [...previous, parseTopic(value)];
 }
 
 function parsePositiveInteger(value: string): number {
@@ -112,4 +122,12 @@ function parseStyling(value: string): ComponentStyling {
   }
 
   return value;
+}
+
+function parseTopic(value: string): ComponentTopic {
+  return ComponentTopicSchema.parse(value.trim().toLowerCase());
+}
+
+function parseMotion(value: string): ComponentMotion {
+  return ComponentMotionSchema.parse(value.trim().toLowerCase());
 }

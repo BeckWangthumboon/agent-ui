@@ -1,4 +1,4 @@
-import type { ComponentFramework, ComponentStyling } from "../types";
+import type { ComponentFramework, ComponentMotion, ComponentStyling, ComponentTopic } from "../types";
 import { loadComponentDocuments } from "../loader";
 import { ComponentSearchEngine } from "../search";
 import { printSearchResults, printValidationIssues } from "../utils/output";
@@ -7,9 +7,10 @@ export type SearchCommandOptions = {
   dataDir: string;
   limit: number;
   json: boolean;
-  tags: string[];
+  topics: ComponentTopic[];
   framework?: ComponentFramework;
   styling?: ComponentStyling;
+  motion?: ComponentMotion;
 };
 
 export async function runSearchCommand(query: string, options: SearchCommandOptions): Promise<void> {
@@ -29,9 +30,10 @@ export async function runSearchCommand(query: string, options: SearchCommandOpti
   const engine = new ComponentSearchEngine(documents);
   const results = engine.search(query, {
     limit: options.limit,
-    tags: options.tags,
+    topics: options.topics,
     framework: options.framework,
     styling: options.styling,
+    motion: options.motion,
   });
 
   if (options.json) {
