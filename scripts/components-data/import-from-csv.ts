@@ -59,34 +59,44 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const motion = readOptional(row, "motion");
-    if (motion && !ALLOWED_MOTION.has(motion)) {
+    const motion = readRequired(row, "motion");
+    if (!ALLOWED_MOTION.has(motion)) {
       warnings.push(`Skipped ${componentId}: invalid motion '${motion}'`);
       continue;
     }
 
     const source = {
       url: readRequired(row, "source_url"),
+      ...(readOptional(row, "source_library") ? { library: readOptional(row, "source_library") } : {}),
       ...(readOptional(row, "source_repo") ? { repo: readOptional(row, "source_repo") } : {}),
       ...(readOptional(row, "source_author") ? { author: readOptional(row, "source_author") } : {}),
       ...(readOptional(row, "source_license") ? { license: readOptional(row, "source_license") } : {}),
     };
 
     const document = {
+      schemaVersion: 2,
       id: componentId,
       name: readRequired(row, "name"),
       source,
       framework: readRequired(row, "framework"),
       styling: readRequired(row, "styling"),
-      dependencies: splitPipe(readOptional(row, "dependencies")),
+      dependencies: splitPipe(readOptional(row, "dependencies")).map((name) => ({
+        name,
+        kind: "runtime" as const,
+      })),
       intent: readRequired(row, "intent"),
       capabilities: splitPipe(readOptional(row, "capabilities")),
       synonyms: splitPipe(readOptional(row, "synonyms")),
       topics: splitPipe(readOptional(row, "topics")),
-      ...(motion ? { constraints: { motion } } : {}),
+      motionLevel: motion,
       code: {
-        fileName: codeFileName,
-        content: codeContent,
+        entryFile: codeFileName,
+        files: [
+          {
+            path: codeFileName,
+            content: codeContent,
+          },
+        ],
       },
     };
 

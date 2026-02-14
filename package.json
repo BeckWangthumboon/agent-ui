@@ -9,7 +9,10 @@
     "show": "bun run src/cli.ts show",
     "validate": "bun run src/cli.ts validate",
     "export:csv": "bun run scripts/components-data/export-to-csv.ts",
-    "import:csv": "bun run scripts/components-data/import-from-csv.ts"
+    "import:csv": "bun run scripts/components-data/import-from-csv.ts",
+    "migrate:v2": "bun run scripts/components-data/migrate-v1-to-v2.ts",
+    "eval:search": "bun run scripts/evals/search-benchmark.ts",
+    "eval:search:sweep": "bun run scripts/evals/search-benchmark.ts --sweep"
   },
   "devDependencies": {
     "@types/bun": "latest"

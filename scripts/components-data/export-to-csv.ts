@@ -15,6 +15,7 @@ type ExportRow = {
   dependencies: string;
   motion: string;
   sourceUrl: string;
+  sourceLibrary: string;
   sourceRepo: string;
   sourceAuthor: string;
   sourceLicense: string;
@@ -104,12 +105,13 @@ function buildExportRow(raw: UnknownRecord): ExportRow {
     synonyms: synonyms.join(LIST_SEPARATOR),
     topics: topics.join(LIST_SEPARATOR),
     dependencies: dependencies.join(LIST_SEPARATOR),
-    motion: readString(constraints.motion) || readString(raw.motion),
+    motion: readString(raw.motionLevel) || readString(constraints.motion) || readString(raw.motion),
     sourceUrl: readString(source.url),
+    sourceLibrary: readString(source.library),
     sourceRepo: readString(source.repo),
     sourceAuthor: readString(source.author),
     sourceLicense: readString(source.license),
-    codeFile: readString(code.fileName),
+    codeFile: readString(code.entryFile) || readString(code.fileName),
   };
 }
 
@@ -201,6 +203,7 @@ function buildCsv(rows: ExportRow[]): string {
     "dependencies",
     "motion",
     "source_url",
+    "source_library",
     "source_repo",
     "source_author",
     "source_license",
@@ -222,6 +225,7 @@ function buildCsv(rows: ExportRow[]): string {
       row.dependencies,
       row.motion,
       row.sourceUrl,
+      row.sourceLibrary,
       row.sourceRepo,
       row.sourceAuthor,
       row.sourceLicense,
