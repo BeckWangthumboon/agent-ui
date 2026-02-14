@@ -95,26 +95,38 @@ export async function validateCodeConsistency(entries: LoadedComponentDocument[]
   const issues: ValidationIssue[] = [];
 
   for (const entry of entries) {
-    const codeFilePath = join(entry.directory, entry.document.code.fileName);
-    const codeFile = Bun.file(codeFilePath);
-    const exists = await codeFile.exists();
+    const indexedFiles = new Map(entry.document.code.files.map((file) => [file.path, file]));
 
-    if (!exists) {
+    if (!indexedFiles.has(entry.document.code.entryFile)) {
       issues.push({
         level: "error",
-        path: codeFilePath,
-        message: "Code file referenced by meta.json does not exist",
+        path: entry.metaPath,
+        message: "code.entryFile does not match any code.files.path",
       });
-      continue;
     }
 
-    const fileContent = await codeFile.text();
-    if (fileContent !== entry.document.code.content) {
-      issues.push({
-        level: "error",
-        path: codeFilePath,
-        message: "Code file content does not match meta.json code.content",
-      });
+    for (const codeFileEntry of entry.document.code.files) {
+      const codeFilePath = join(entry.directory, codeFileEntry.path);
+      const codeFile = Bun.file(codeFilePath);
+      const exists = await codeFile.exists();
+
+      if (!exists) {
+        issues.push({
+          level: "error",
+          path: codeFilePath,
+          message: "Code file referenced by meta.json does not exist",
+        });
+        continue;
+      }
+
+      const fileContent = await codeFile.text();
+      if (fileContent !== codeFileEntry.content) {
+        issues.push({
+          level: "error",
+          path: codeFilePath,
+          message: "Code file content does not match meta.json code.files content",
+        });
+      }
     }
   }
 

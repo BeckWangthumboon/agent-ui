@@ -16,7 +16,7 @@ export const FUSE_OPTIONS: IFuseOptions<ComponentDocument> = {
     { name: "capabilities", weight: 0.18 },
     { name: "synonyms", weight: 0.13 },
     { name: "topics", weight: 0.08 },
-    { name: "dependencies", weight: 0.04 },
-    { name: "code.content", weight: 0.02 },
+    { name: "dependencies.name", weight: 0.04 },
+    { name: "code.files.content", weight: 0.02 },
   ],
 };

@@ -88,7 +88,7 @@ export class ComponentSearchEngine {
         return false;
       }
 
-      if (filters.motion && document.constraints?.motion !== filters.motion) {
+      if (filters.motion && document.motionLevel !== filters.motion) {
         return false;
       }
 

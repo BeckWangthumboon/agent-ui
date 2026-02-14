@@ -29,9 +29,7 @@ export function printSearchResults(results: ComponentSearchResult[]): void {
       console.log(`    topics: ${document.topics.join(", ")}`);
     }
 
-    if (document.constraints?.motion) {
-      console.log(`    motion: ${document.constraints.motion}`);
-    }
+    console.log(`    motionLevel: ${document.motionLevel}`);
 
     console.log(`    source: ${document.source.url}`);
   }
@@ -44,7 +42,12 @@ export function printComponentDocument(document: ComponentDocument, includeCode:
 
   console.log(`framework: ${document.framework}`);
   console.log(`styling: ${document.styling}`);
+  console.log(`motionLevel: ${document.motionLevel}`);
   console.log(`source.url: ${document.source.url}`);
+
+  if (document.source.library) {
+    console.log(`source.library: ${document.source.library}`);
+  }
 
   if (document.source.repo) {
     console.log(`source.repo: ${document.source.repo}`);
@@ -70,18 +73,30 @@ export function printComponentDocument(document: ComponentDocument, includeCode:
     console.log(`synonyms: ${document.synonyms.join(", ")}`);
   }
 
-  if (document.constraints?.motion) {
-    console.log(`constraints.motion: ${document.constraints.motion}`);
-  }
-
   if (document.dependencies.length > 0) {
-    console.log(`dependencies: ${document.dependencies.join(", ")}`);
+    const formattedDependencies = document.dependencies.map((dependency) => `${dependency.name} (${dependency.kind})`);
+    console.log(`dependencies: ${formattedDependencies.join(", ")}`);
   }
 
-  console.log(`code.fileName: ${document.code.fileName}`);
+  console.log(`code.entryFile: ${document.code.entryFile}`);
+  console.log(`code.fileCount: ${document.code.files.length}`);
 
   if (includeCode) {
-    console.log("--- code ---");
-    console.log(document.code.content);
+    const orderedFiles = [...document.code.files].sort((left, right) => {
+      if (left.path === document.code.entryFile) {
+        return -1;
+      }
+
+      if (right.path === document.code.entryFile) {
+        return 1;
+      }
+
+      return left.path.localeCompare(right.path);
+    });
+
+    for (const file of orderedFiles) {
+      console.log(`--- code: ${file.path} ---`);
+      console.log(file.content);
+    }
   }
 }
