@@ -37,3 +37,4 @@ data/
 .DS_Store
 
 data
+.agents/
