@@ -3,18 +3,48 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "cli": "bun run src/cli.ts",
-    "export:csv": "bun run scripts/components-data/export-to-csv.ts",
-    "import:csv": "bun run scripts/components-data/import-from-csv.ts",
+    "dev:web": "bun run --cwd apps/web dev",
+    "build:web": "bun run --cwd apps/web build",
+    "dev:cli": "bun run --cwd apps/cli dev",
+    "cli": "bun run --cwd apps/cli dev",
+    "check": "bun run scripts/check.ts",
+    "check:web": "bun run scripts/check.ts web",
+    "check:cli": "bun run scripts/check.ts cli",
+    "typecheck": "bun run typecheck:web && bun run typecheck:cli",
+    "typecheck:web": "bun run --cwd apps/web typecheck",
+    "typecheck:cli": "bun run --cwd apps/cli typecheck",
+    "lint": "bunx eslint .",
+    "lint:web": "bunx eslint apps/web",
+    "lint:cli": "bunx eslint apps/cli",
+    "lint:fix": "bunx eslint . --fix",
+    "format": "bunx prettier . --write",
+    "format:check": "bunx prettier . --check",
+    "format:check:quiet": "bunx prettier . --check --log-level silent",
+    "format:check:web": "bunx prettier apps/web --check",
+    "format:check:web:quiet": "bunx prettier apps/web --check --log-level silent",
+    "format:check:cli": "bunx prettier apps/cli --check",
+    "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
+    "data:export-csv": "bun run scripts/components-data/export-to-csv.ts",
+    "data:import-csv": "bun run scripts/components-data/import-from-csv.ts",
+    "export:csv": "bun run data:export-csv",
+    "import:csv": "bun run data:import-csv",
     "eval:search": "bun run scripts/evals/search-benchmark.ts",
     "eval:search:sweep": "bun run scripts/evals/search-benchmark.ts --sweep"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "@eslint/js": "^9.39.1",
+    "@types/bun": "latest",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0"
   },
   "dependencies": {
     "commander": "^14.0.3",
