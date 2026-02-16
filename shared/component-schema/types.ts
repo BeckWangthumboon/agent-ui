@@ -1,3 +1,4 @@
+import { type Infer, v } from "convex/values";
 import { z } from "zod";
 
 import {
@@ -7,6 +8,90 @@ import {
   COMPONENT_TOPICS,
   DEPENDENCY_KINDS,
 } from "./constants";
+
+function literalTupleFromUnion<TValue extends string>(validator: {
+  members: Array<{ value: TValue }>;
+}): [TValue, ...TValue[]] {
+  const values = validator.members.map((member) => member.value);
+  const first = values[0];
+
+  if (!first) {
+    throw new Error("Expected at least one literal value");
+  }
+
+  return [first, ...values.slice(1)];
+}
+
+const ComponentFrameworkValues = literalTupleFromUnion(COMPONENT_FRAMEWORKS);
+const ComponentStylingValues = literalTupleFromUnion(COMPONENT_STYLINGS);
+const ComponentMotionValues = literalTupleFromUnion(COMPONENT_MOTION_LEVELS);
+const DependencyKindValues = literalTupleFromUnion(DEPENDENCY_KINDS);
+const ComponentTopicValues = literalTupleFromUnion(COMPONENT_TOPICS);
+
+export const ComponentFrameworkValidator = COMPONENT_FRAMEWORKS;
+export type ComponentFramework = Infer<typeof ComponentFrameworkValidator>;
+
+export const ComponentStylingValidator = COMPONENT_STYLINGS;
+export type ComponentStyling = Infer<typeof ComponentStylingValidator>;
+
+export const ComponentMotionValidator = COMPONENT_MOTION_LEVELS;
+export type ComponentMotion = Infer<typeof ComponentMotionValidator>;
+
+export const DependencyKindValidator = DEPENDENCY_KINDS;
+export type DependencyKind = Infer<typeof DependencyKindValidator>;
+
+export const ComponentTopicValidator = COMPONENT_TOPICS;
+export type ComponentTopic = Infer<typeof ComponentTopicValidator>;
+
+export const DependencyValidator = v.object({
+  name: v.string(),
+  kind: DependencyKindValidator,
+});
+export type Dependency = Infer<typeof DependencyValidator>;
+
+export const ComponentSourceValidator = v.object({
+  library: v.optional(v.string()),
+  repo: v.optional(v.string()),
+  author: v.optional(v.string()),
+  license: v.optional(v.string()),
+  url: v.string(),
+});
+export type ComponentSource = Infer<typeof ComponentSourceValidator>;
+
+export const ComponentConstraintsValidator = v.object({});
+export type ComponentConstraints = Infer<typeof ComponentConstraintsValidator>;
+
+export const ComponentCodeFileValidator = v.object({
+  path: v.string(),
+  content: v.string(),
+});
+export type ComponentCodeFile = Infer<typeof ComponentCodeFileValidator>;
+
+export const ComponentCodeValidator = v.object({
+  entryFile: v.string(),
+  files: v.array(ComponentCodeFileValidator),
+});
+export type ComponentCode = Infer<typeof ComponentCodeValidator>;
+
+export const componentDocumentFields = {
+  schemaVersion: v.literal(2),
+  id: v.string(),
+  name: v.string(),
+  source: ComponentSourceValidator,
+  framework: ComponentFrameworkValidator,
+  styling: ComponentStylingValidator,
+  dependencies: v.array(DependencyValidator),
+  intent: v.string(),
+  capabilities: v.array(v.string()),
+  synonyms: v.array(v.string()),
+  topics: v.array(ComponentTopicValidator),
+  motionLevel: ComponentMotionValidator,
+  constraints: v.optional(ComponentConstraintsValidator),
+  code: ComponentCodeValidator,
+} as const;
+
+export const ComponentDocumentValidator = v.object(componentDocumentFields);
+export type ComponentDocument = Infer<typeof ComponentDocumentValidator>;
 
 const NonEmptyTextSchema = z.string().trim().min(1);
 
@@ -28,49 +113,37 @@ const RelativeFilePathSchema = NonEmptyTextSchema.refine(
   },
 );
 
-export const ComponentFrameworkSchema = z.enum(COMPONENT_FRAMEWORKS);
-export type ComponentFramework = z.infer<typeof ComponentFrameworkSchema>;
+export const ComponentFrameworkSchema = z.enum(ComponentFrameworkValues);
 
-export const ComponentStylingSchema = z.enum(COMPONENT_STYLINGS);
-export type ComponentStyling = z.infer<typeof ComponentStylingSchema>;
+export const ComponentStylingSchema = z.enum(ComponentStylingValues);
 
-export const ComponentMotionSchema = z.enum(COMPONENT_MOTION_LEVELS);
-export type ComponentMotion = z.infer<typeof ComponentMotionSchema>;
+export const ComponentMotionSchema = z.enum(ComponentMotionValues);
 
-export const DependencyKindSchema = z.enum(DEPENDENCY_KINDS);
-export type DependencyKind = z.infer<typeof DependencyKindSchema>;
+export const DependencyKindSchema = z.enum(DependencyKindValues);
 
-export const DependencySchema = z
-  .strictObject({
-    name: NonEmptyTextSchema,
-    kind: DependencyKindSchema.default("runtime"),
-  });
-export type Dependency = z.infer<typeof DependencySchema>;
+export const DependencySchema: z.ZodType<Dependency> = z.strictObject({
+  name: NonEmptyTextSchema,
+  kind: DependencyKindSchema.default("runtime"),
+});
 
-export const ComponentTopicSchema = z.enum(COMPONENT_TOPICS);
-export type ComponentTopic = z.infer<typeof ComponentTopicSchema>;
+export const ComponentTopicSchema = z.enum(ComponentTopicValues);
 
-export const ComponentSourceSchema = z
-  .strictObject({
-    library: NonEmptyTextSchema.optional(),
-    repo: NonEmptyTextSchema.optional(),
-    author: NonEmptyTextSchema.optional(),
-    license: NonEmptyTextSchema.optional(),
-    url: z.url(),
-  });
-export type ComponentSource = z.infer<typeof ComponentSourceSchema>;
+export const ComponentSourceSchema: z.ZodType<ComponentSource> = z.strictObject({
+  library: NonEmptyTextSchema.optional(),
+  repo: NonEmptyTextSchema.optional(),
+  author: NonEmptyTextSchema.optional(),
+  license: NonEmptyTextSchema.optional(),
+  url: z.url(),
+});
 
-export const ComponentConstraintsSchema = z.strictObject({});
-export type ComponentConstraints = z.infer<typeof ComponentConstraintsSchema>;
+export const ComponentConstraintsSchema: z.ZodType<ComponentConstraints> = z.strictObject({});
 
-export const ComponentCodeFileSchema = z
-  .strictObject({
-    path: RelativeFilePathSchema,
-    content: z.string().min(1),
-  });
-export type ComponentCodeFile = z.infer<typeof ComponentCodeFileSchema>;
+export const ComponentCodeFileSchema: z.ZodType<ComponentCodeFile> = z.strictObject({
+  path: RelativeFilePathSchema,
+  content: z.string().min(1),
+});
 
-export const ComponentCodeSchema = z
+export const ComponentCodeSchema: z.ZodType<ComponentCode> = z
   .strictObject({
     entryFile: RelativeFilePathSchema,
     files: z.array(ComponentCodeFileSchema).min(1),
@@ -98,26 +171,23 @@ export const ComponentCodeSchema = z
       });
     }
   });
-export type ComponentCode = z.infer<typeof ComponentCodeSchema>;
 
-export const ComponentDocumentSchema = z
-  .strictObject({
-    schemaVersion: z.literal(2),
-    id: NonEmptyTextSchema,
-    name: NonEmptyTextSchema,
-    source: ComponentSourceSchema,
-    framework: ComponentFrameworkSchema,
-    styling: ComponentStylingSchema,
-    dependencies: z.array(DependencySchema).default([]),
-    intent: NonEmptyTextSchema,
-    capabilities: z.array(NonEmptyTextSchema).default([]),
-    synonyms: z.array(NonEmptyTextSchema).default([]),
-    topics: z.array(ComponentTopicSchema).default([]),
-    motionLevel: ComponentMotionSchema,
-    constraints: ComponentConstraintsSchema.optional(),
-    code: ComponentCodeSchema,
-  });
-export type ComponentDocument = z.infer<typeof ComponentDocumentSchema>;
+export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObject({
+  schemaVersion: z.literal(2),
+  id: NonEmptyTextSchema,
+  name: NonEmptyTextSchema,
+  source: ComponentSourceSchema,
+  framework: ComponentFrameworkSchema,
+  styling: ComponentStylingSchema,
+  dependencies: z.array(DependencySchema).default([]),
+  intent: NonEmptyTextSchema,
+  capabilities: z.array(NonEmptyTextSchema).default([]),
+  synonyms: z.array(NonEmptyTextSchema).default([]),
+  topics: z.array(ComponentTopicSchema).default([]),
+  motionLevel: ComponentMotionSchema,
+  constraints: ComponentConstraintsSchema.optional(),
+  code: ComponentCodeSchema,
+});
 
 export function parseComponentDocument(input: unknown): ComponentDocument {
   return ComponentDocumentSchema.parse(input);

@@ -1,12 +1,32 @@
-export const COMPONENT_FRAMEWORKS = ["react"] as const;
+import { v } from "convex/values";
 
-export const COMPONENT_STYLINGS = ["tailwind"] as const;
+type NonEmptyStringTuple = readonly [string, ...string[]];
 
-export const COMPONENT_MOTION_LEVELS = ["none", "minimal", "standard", "heavy"] as const;
+function literalUnion<const TValues extends NonEmptyStringTuple>(values: TValues) {
+  const literals = values.map((value) => v.literal(value));
+  const first = literals[0];
 
-export const DEPENDENCY_KINDS = ["runtime", "dev", "peer"] as const;
+  if (!first) {
+    throw new Error("literalUnion requires at least one value");
+  }
 
-export const COMPONENT_TOPICS = [
+  return v.union(first, ...literals.slice(1));
+}
+
+export const COMPONENT_FRAMEWORKS = literalUnion(["react"] as const);
+
+export const COMPONENT_STYLINGS = literalUnion(["tailwind"] as const);
+
+export const COMPONENT_MOTION_LEVELS = literalUnion([
+  "none",
+  "minimal",
+  "standard",
+  "heavy",
+] as const);
+
+export const DEPENDENCY_KINDS = literalUnion(["runtime", "dev", "peer"] as const);
+
+export const COMPONENT_TOPICS = literalUnion([
   "action",
   "selection",
   "toggle",
@@ -40,4 +60,4 @@ export const COMPONENT_TOPICS = [
   "scrolling",
   "resizable",
   "keyboard",
-] as const;
+] as const);

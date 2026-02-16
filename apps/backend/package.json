@@ -1,0 +1,14 @@
+{
+  "name": "@agent-ui/backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bunx convex dev",
+    "generate": "bunx convex dev --once",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed:data": "bun run scripts/import-components.ts"
+  },
+  "dependencies": {
+    "convex": "1.31.7"
+  }
+}
