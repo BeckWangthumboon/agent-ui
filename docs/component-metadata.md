@@ -1,15 +1,23 @@
 # Component Metadata Annotation Guide (Schema v2)
 
-This guide defines how to annotate component metadata in `data/components.csv`.
+This guide defines how to annotate component metadata via `data/components.csv` and keep generated component documents consistent.
 
-`data/components.csv` is the editable source of truth. After edits, run `bun run import:csv` to regenerate `data/components/*/meta.json` in schema v2 format.
+`data/components/*/meta.json` (plus component code files) is the canonical source of truth. `data/components.csv` is a temporary editing/import surface for easier bulk annotation and user edits.
+
+After CSV edits, run `bun run import:csv` to synchronize `data/components/*/meta.json` to schema v2.
+
+## Source of truth policy
+
+- Treat JSON component documents under `data/components/<id>/meta.json` as canonical.
+- Treat `data/components.csv` as a convenience layer for bulk edits and annotation.
+- Consider CSV work incomplete until import and validation both pass.
 
 ## Workflow
 
 1. Edit rows in `data/components.csv`.
-2. Ensure each row's `code_file` exists in that component directory under `data/components/`.
+2. Ensure each row's `code_file` exists at `data/components/<id>/<code_file>`.
 3. Run `bun run import:csv`.
-4. Run `bun run validate`.
+4. Run `bun run validate` (or `bun run cli validate` if no `validate` script exists).
 
 ## CSV column contract
 
@@ -35,7 +43,7 @@ This guide defines how to annotate component metadata in `data/components.csv`.
 - `motion` in CSV maps to `motionLevel` in `meta.json`.
 - `capabilities`, `synonyms`, `topics`, and `dependencies` are split on `|`, trimmed, and deduplicated case-insensitively.
 - `dependencies` become objects in `meta.json` with `kind: "runtime"`.
-- `code_file` maps to `code.entryFile`; importer loads file content from disk into `code.files`.
+- `code_file` maps to `code.entryFile`; importer loads file content from `data/components/<id>/<code_file>` into `code.files`.
 
 ## Annotation guidance (semantic fields)
 

@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, extname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 type CsvRow = Record<string, string>;
 
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   for (const row of rows) {
     const codeFileName = readRequired(row, "code_file");
     const componentId = readRequired(row, "id");
-    const componentDirName = toComponentDirName(componentId, codeFileName);
+    const componentDirName = toComponentDirName(componentId);
     const componentDirPath = join(componentsDir, componentDirName);
     const codePath = join(componentDirPath, codeFileName);
 
@@ -114,13 +114,8 @@ async function main(): Promise<void> {
   }
 }
 
-function toComponentDirName(componentId: string, codeFileName: string): string {
-  const codeBase = basename(codeFileName, extname(codeFileName)).trim();
-  if (codeBase.length > 0) {
-    return codeBase;
-  }
-
-  return componentId.replace(/^shadcn-/, "").trim();
+function toComponentDirName(componentId: string): string {
+  return componentId.trim();
 }
 
 function splitPipe(value: string | undefined): string[] {
