@@ -11,6 +11,7 @@ export default defineConfig([
       "**/node_modules/**",
       "**/dist/**",
       "**/.tanstack/**",
+      "**/convex/_generated/**",
       "**/*.gen.ts",
       "data/**",
       "coverage/**",
