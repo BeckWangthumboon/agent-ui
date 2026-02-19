@@ -2,8 +2,10 @@ import { type Infer, v } from "convex/values";
 import { z } from "zod";
 
 import {
+  COMPONENT_ANIMATION_LIBRARIES,
   COMPONENT_FRAMEWORKS,
   COMPONENT_MOTION_LEVELS,
+  COMPONENT_PRIMITIVE_LIBRARIES,
   COMPONENT_STYLINGS,
   COMPONENT_TOPICS,
   DEPENDENCY_KINDS,
@@ -27,6 +29,8 @@ const ComponentStylingValues = literalTupleFromUnion(COMPONENT_STYLINGS);
 const ComponentMotionValues = literalTupleFromUnion(COMPONENT_MOTION_LEVELS);
 const DependencyKindValues = literalTupleFromUnion(DEPENDENCY_KINDS);
 const ComponentTopicValues = literalTupleFromUnion(COMPONENT_TOPICS);
+const ComponentPrimitiveLibraryValues = literalTupleFromUnion(COMPONENT_PRIMITIVE_LIBRARIES);
+const ComponentAnimationLibraryValues = literalTupleFromUnion(COMPONENT_ANIMATION_LIBRARIES);
 
 export const ComponentFrameworkValidator = COMPONENT_FRAMEWORKS;
 export type ComponentFramework = Infer<typeof ComponentFrameworkValidator>;
@@ -42,6 +46,12 @@ export type DependencyKind = Infer<typeof DependencyKindValidator>;
 
 export const ComponentTopicValidator = COMPONENT_TOPICS;
 export type ComponentTopic = Infer<typeof ComponentTopicValidator>;
+
+export const ComponentPrimitiveLibraryValidator = COMPONENT_PRIMITIVE_LIBRARIES;
+export type ComponentPrimitiveLibrary = Infer<typeof ComponentPrimitiveLibraryValidator>;
+
+export const ComponentAnimationLibraryValidator = COMPONENT_ANIMATION_LIBRARIES;
+export type ComponentAnimationLibrary = Infer<typeof ComponentAnimationLibraryValidator>;
 
 export const DependencyValidator = v.object({
   name: v.string(),
@@ -73,6 +83,7 @@ export const ComponentCodeValidator = v.object({
 });
 export type ComponentCode = Infer<typeof ComponentCodeValidator>;
 
+// Legacy source document schema used by data/components/*/meta.json.
 export const componentDocumentFields = {
   schemaVersion: v.literal(2),
   id: v.string(),
@@ -86,6 +97,8 @@ export const componentDocumentFields = {
   synonyms: v.array(v.string()),
   topics: v.array(ComponentTopicValidator),
   motionLevel: ComponentMotionValidator,
+  primitiveLibrary: v.optional(ComponentPrimitiveLibraryValidator),
+  animationLibrary: v.optional(ComponentAnimationLibraryValidator),
   constraints: v.optional(ComponentConstraintsValidator),
   code: ComponentCodeValidator,
 } as const;
@@ -93,7 +106,57 @@ export const componentDocumentFields = {
 export const ComponentDocumentValidator = v.object(componentDocumentFields);
 export type ComponentDocument = Infer<typeof ComponentDocumentValidator>;
 
+export const componentMetadataFields = {
+  schemaVersion: v.literal(3),
+  id: v.string(),
+  legacyId: v.string(),
+  name: v.string(),
+  source: ComponentSourceValidator,
+  framework: ComponentFrameworkValidator,
+  styling: ComponentStylingValidator,
+  dependencies: v.array(DependencyValidator),
+  intent: v.string(),
+  motionLevel: ComponentMotionValidator,
+  primitiveLibrary: ComponentPrimitiveLibraryValidator,
+  animationLibrary: ComponentAnimationLibraryValidator,
+  constraints: v.optional(ComponentConstraintsValidator),
+  codeEntryFile: v.string(),
+  codeFileCount: v.number(),
+} as const;
+
+export const ComponentMetadataDocumentValidator = v.object(componentMetadataFields);
+export type ComponentMetadataDocument = Infer<typeof ComponentMetadataDocumentValidator>;
+
+export const componentCodeFields = {
+  schemaVersion: v.literal(3),
+  componentId: v.string(),
+  entryFile: v.string(),
+  files: v.array(ComponentCodeFileValidator),
+} as const;
+
+export const ComponentCodeDocumentValidator = v.object(componentCodeFields);
+export type ComponentCodeDocument = Infer<typeof ComponentCodeDocumentValidator>;
+
+export const componentSearchFields = {
+  schemaVersion: v.literal(3),
+  componentId: v.string(),
+  name: v.string(),
+  framework: ComponentFrameworkValidator,
+  styling: ComponentStylingValidator,
+  intent: v.string(),
+  capabilities: v.array(v.string()),
+  synonyms: v.array(v.string()),
+  topics: v.array(ComponentTopicValidator),
+  motionLevel: ComponentMotionValidator,
+  primitiveLibrary: ComponentPrimitiveLibraryValidator,
+  animationLibrary: ComponentAnimationLibraryValidator,
+} as const;
+
+export const ComponentSearchDocumentValidator = v.object(componentSearchFields);
+export type ComponentSearchDocument = Infer<typeof ComponentSearchDocumentValidator>;
+
 const NonEmptyTextSchema = z.string().trim().min(1);
+const NonNegativeIntegerSchema = z.number().int().min(0);
 
 const RelativeFilePathSchema = NonEmptyTextSchema.refine(
   (value) => {
@@ -121,12 +184,16 @@ export const ComponentMotionSchema = z.enum(ComponentMotionValues);
 
 export const DependencyKindSchema = z.enum(DependencyKindValues);
 
+export const ComponentTopicSchema = z.enum(ComponentTopicValues);
+
+export const ComponentPrimitiveLibrarySchema = z.enum(ComponentPrimitiveLibraryValues);
+
+export const ComponentAnimationLibrarySchema = z.enum(ComponentAnimationLibraryValues);
+
 export const DependencySchema: z.ZodType<Dependency> = z.strictObject({
   name: NonEmptyTextSchema,
   kind: DependencyKindSchema.default("runtime"),
 });
-
-export const ComponentTopicSchema = z.enum(ComponentTopicValues);
 
 export const ComponentSourceSchema: z.ZodType<ComponentSource> = z.strictObject({
   library: NonEmptyTextSchema.optional(),
@@ -185,8 +252,52 @@ export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObj
   synonyms: z.array(NonEmptyTextSchema).default([]),
   topics: z.array(ComponentTopicSchema).default([]),
   motionLevel: ComponentMotionSchema,
+  primitiveLibrary: ComponentPrimitiveLibrarySchema.optional(),
+  animationLibrary: ComponentAnimationLibrarySchema.optional(),
   constraints: ComponentConstraintsSchema.optional(),
   code: ComponentCodeSchema,
+});
+
+export const ComponentMetadataDocumentSchema: z.ZodType<ComponentMetadataDocument> = z.strictObject(
+  {
+    schemaVersion: z.literal(3),
+    id: NonEmptyTextSchema,
+    legacyId: NonEmptyTextSchema,
+    name: NonEmptyTextSchema,
+    source: ComponentSourceSchema,
+    framework: ComponentFrameworkSchema,
+    styling: ComponentStylingSchema,
+    dependencies: z.array(DependencySchema).default([]),
+    intent: NonEmptyTextSchema,
+    motionLevel: ComponentMotionSchema,
+    primitiveLibrary: ComponentPrimitiveLibrarySchema,
+    animationLibrary: ComponentAnimationLibrarySchema,
+    constraints: ComponentConstraintsSchema.optional(),
+    codeEntryFile: RelativeFilePathSchema,
+    codeFileCount: NonNegativeIntegerSchema,
+  },
+);
+
+export const ComponentCodeDocumentSchema: z.ZodType<ComponentCodeDocument> = z.strictObject({
+  schemaVersion: z.literal(3),
+  componentId: NonEmptyTextSchema,
+  entryFile: RelativeFilePathSchema,
+  files: z.array(ComponentCodeFileSchema).min(1),
+});
+
+export const ComponentSearchDocumentSchema: z.ZodType<ComponentSearchDocument> = z.strictObject({
+  schemaVersion: z.literal(3),
+  componentId: NonEmptyTextSchema,
+  name: NonEmptyTextSchema,
+  framework: ComponentFrameworkSchema,
+  styling: ComponentStylingSchema,
+  intent: NonEmptyTextSchema,
+  capabilities: z.array(NonEmptyTextSchema).default([]),
+  synonyms: z.array(NonEmptyTextSchema).default([]),
+  topics: z.array(ComponentTopicSchema).default([]),
+  motionLevel: ComponentMotionSchema,
+  primitiveLibrary: ComponentPrimitiveLibrarySchema,
+  animationLibrary: ComponentAnimationLibrarySchema,
 });
 
 export function parseComponentDocument(input: unknown): ComponentDocument {

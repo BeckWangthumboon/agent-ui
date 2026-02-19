@@ -26,6 +26,20 @@ export const COMPONENT_MOTION_LEVELS = literalUnion([
 
 export const DEPENDENCY_KINDS = literalUnion(["runtime", "dev", "peer"] as const);
 
+export const COMPONENT_PRIMITIVE_LIBRARIES = literalUnion([
+  "none",
+  "radix",
+  "base-ui",
+  "other",
+] as const);
+
+export const COMPONENT_ANIMATION_LIBRARIES = literalUnion([
+  "none",
+  "motion",
+  "framer-motion",
+  "other",
+] as const);
+
 export const COMPONENT_TOPICS = literalUnion([
   "action",
   "selection",
