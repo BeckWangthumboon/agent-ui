@@ -35,9 +35,6 @@ type ViewComponent = Pick<
   | "styling"
   | "dependencies"
   | "intent"
-  | "capabilities"
-  | "synonyms"
-  | "topics"
   | "motionLevel"
   | "constraints"
   | "code"
@@ -75,9 +72,6 @@ function toViewComponent(component: ComponentRecord): ViewComponent {
     styling: component.styling,
     dependencies: component.dependencies,
     intent: component.intent,
-    capabilities: component.capabilities,
-    synonyms: component.synonyms,
-    topics: component.topics,
     motionLevel: component.motionLevel,
     constraints: component.constraints,
     code: component.code,

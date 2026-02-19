@@ -47,7 +47,9 @@ type PrintOptions = {
   includeCode: boolean;
 };
 
-function printComponent(component: ComponentDocument, options: PrintOptions): void {
+type ViewComponent = Omit<ComponentDocument, "capabilities" | "synonyms" | "topics">;
+
+function printComponent(component: ViewComponent, options: PrintOptions): void {
   console.log(`${component.name} (${component.id})`);
   console.log(`intent: ${component.intent}`);
   console.log(
@@ -79,18 +81,6 @@ function printComponent(component: ComponentDocument, options: PrintOptions): vo
       console.log(`dependencies: ${dependencies}`);
     } else {
       console.log("dependencies: none");
-    }
-
-    if (component.topics.length > 0) {
-      console.log(`topics: ${component.topics.join(", ")}`);
-    }
-
-    if (component.capabilities.length > 0) {
-      console.log(`capabilities: ${component.capabilities.join(", ")}`);
-    }
-
-    if (component.synonyms.length > 0) {
-      console.log(`synonyms: ${component.synonyms.join(", ")}`);
     }
 
     console.log(`code.entryFile: ${component.code.entryFile}`);

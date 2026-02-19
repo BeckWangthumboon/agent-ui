@@ -102,3 +102,11 @@ export function createSampleComponent(): ComponentDocument {
     },
   };
 }
+
+export type ViewComponent = Omit<ComponentDocument, "capabilities" | "synonyms" | "topics">;
+
+export function createSampleViewComponent(): ViewComponent {
+  const { capabilities: _capabilities, synonyms: _synonyms, topics: _topics, ...component } =
+    createSampleComponent();
+  return component;
+}

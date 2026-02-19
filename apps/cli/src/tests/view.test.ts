@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import { runViewCommand } from "../view";
-import { captureCommandOutput, createMockClient, createSampleComponent } from "./helpers";
+import { captureCommandOutput, createMockClient, createSampleViewComponent } from "./helpers";
 
 describe("runViewCommand", () => {
   it("prints concise output by default", async () => {
-    const component = createSampleComponent();
+    const component = createSampleViewComponent();
     const { client } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
@@ -22,7 +22,7 @@ describe("runViewCommand", () => {
   });
 
   it("prints expanded metadata in --verbose mode", async () => {
-    const component = createSampleComponent();
+    const component = createSampleViewComponent();
     const { client } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
@@ -35,15 +35,15 @@ describe("runViewCommand", () => {
     expect(text).toContain("source.author: shadcn");
     expect(text).toContain("source.license: MIT");
     expect(text).toContain("dependencies: class-variance-authority (runtime)");
-    expect(text).toContain("topics: action");
-    expect(text).toContain("capabilities: click, submit");
-    expect(text).toContain("synonyms: cta button");
+    expect(text).not.toContain("topics:");
+    expect(text).not.toContain("capabilities:");
+    expect(text).not.toContain("synonyms:");
     expect(text).toContain("code.entryFile: button.tsx");
     expect(text).toContain("code.fileCount: 2");
   });
 
   it("prints entry file first when --code is enabled", async () => {
-    const component = createSampleComponent();
+    const component = createSampleViewComponent();
     const { client } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
@@ -55,7 +55,7 @@ describe("runViewCommand", () => {
   });
 
   it("prints full json in --json mode", async () => {
-    const component = createSampleComponent();
+    const component = createSampleViewComponent();
     const { client } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
@@ -66,6 +66,9 @@ describe("runViewCommand", () => {
     const payload = JSON.parse(output.logs[0] ?? "{}");
     expect(payload.id).toBe("core-button");
     expect(payload.code.entryFile).toBe("button.tsx");
+    expect(payload.capabilities).toBeUndefined();
+    expect(payload.synonyms).toBeUndefined();
+    expect(payload.topics).toBeUndefined();
   });
 
   it("returns not found for missing ids", async () => {
