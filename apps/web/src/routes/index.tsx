@@ -33,22 +33,18 @@ const SEARCH_DEBOUNCE_MS = 250;
 function HomePage() {
   const components = useQuery(api.components.listDirectory);
   const [searchQuery, setSearchQuery] = useState("");
-  const [libraryFilter, setLibraryFilter] = useState(ALL_FILTER);
+  const [primitiveFilter, setPrimitiveFilter] = useState(ALL_FILTER);
   const [motionFilter, setMotionFilter] = useState(ALL_FILTER);
   const debouncedSearchQuery = useDebouncedValue(searchQuery, SEARCH_DEBOUNCE_MS);
 
-  const libraryOptions = useMemo(() => {
+  const primitiveOptions = useMemo(() => {
     if (!components) {
       return [];
     }
 
-    return Array.from(
-      new Set(
-        components
-          .map((component) => component.source.library)
-          .filter((value): value is string => Boolean(value)),
-      ),
-    ).sort((left, right) => left.localeCompare(right, "en"));
+    return Array.from(new Set(components.map((component) => component.primitiveLibrary))).sort(
+      (left, right) => left.localeCompare(right, "en"),
+    );
   }, [components]);
 
   const motionOptions = useMemo(() => {
@@ -69,11 +65,11 @@ function HomePage() {
     const normalizedQuery = debouncedSearchQuery.trim().toLowerCase();
 
     return components.filter((component) => {
-      const matchesLibrary =
-        libraryFilter === ALL_FILTER || (component.source.library ?? ALL_FILTER) === libraryFilter;
+      const matchesPrimitive =
+        primitiveFilter === ALL_FILTER || component.primitiveLibrary === primitiveFilter;
       const matchesMotion = motionFilter === ALL_FILTER || component.motionLevel === motionFilter;
 
-      if (!matchesLibrary || !matchesMotion) {
+      if (!matchesPrimitive || !matchesMotion) {
         return false;
       }
 
@@ -82,10 +78,10 @@ function HomePage() {
       }
 
       const searchableText =
-        `${component.name} ${component.intent} ${component.id} ${component.source.library ?? ""} ${component.source.author ?? ""}`.toLowerCase();
+        `${component.name} ${component.intent} ${component.id} ${component.source.library ?? ""} ${component.source.author ?? ""} ${component.primitiveLibrary}`.toLowerCase();
       return searchableText.includes(normalizedQuery);
     });
-  }, [components, debouncedSearchQuery, libraryFilter, motionFilter]);
+  }, [components, debouncedSearchQuery, primitiveFilter, motionFilter]);
 
   if (components === undefined) {
     return (
@@ -127,15 +123,15 @@ function HomePage() {
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search name, description, id, source..."
         />
-        <Select value={libraryFilter} onValueChange={setLibraryFilter}>
+        <Select value={primitiveFilter} onValueChange={setPrimitiveFilter}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="All libraries" />
+            <SelectValue placeholder="All primitives" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_FILTER}>All libraries</SelectItem>
-            {libraryOptions.map((library) => (
-              <SelectItem key={library} value={library}>
-                {library}
+            <SelectItem value={ALL_FILTER}>All primitives</SelectItem>
+            {primitiveOptions.map((primitive) => (
+              <SelectItem key={primitive} value={primitive}>
+                {primitive}
               </SelectItem>
             ))}
           </SelectContent>
@@ -158,7 +154,7 @@ function HomePage() {
           variant="outline"
           onClick={() => {
             setSearchQuery("");
-            setLibraryFilter(ALL_FILTER);
+            setPrimitiveFilter(ALL_FILTER);
             setMotionFilter(ALL_FILTER);
           }}
         >

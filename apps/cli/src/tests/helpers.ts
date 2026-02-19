@@ -86,6 +86,8 @@ export function createSampleComponent(): ComponentDocument {
     synonyms: ["cta button"],
     topics: ["action"],
     motionLevel: "minimal",
+    primitiveLibrary: "none",
+    animationLibrary: "none",
     constraints: {},
     code: {
       entryFile: "button.tsx",
@@ -103,10 +105,111 @@ export function createSampleComponent(): ComponentDocument {
   };
 }
 
-export type ViewComponent = Omit<ComponentDocument, "capabilities" | "synonyms" | "topics">;
+export type SearchCandidate = Pick<
+  ComponentDocument,
+  | "id"
+  | "name"
+  | "framework"
+  | "styling"
+  | "intent"
+  | "capabilities"
+  | "synonyms"
+  | "topics"
+  | "motionLevel"
+  | "primitiveLibrary"
+  | "animationLibrary"
+>;
+
+export function createSampleSearchCandidate(): SearchCandidate {
+  const component = createSampleComponent();
+  return {
+    id: component.id,
+    name: component.name,
+    framework: component.framework,
+    styling: component.styling,
+    intent: component.intent,
+    capabilities: component.capabilities,
+    synonyms: component.synonyms,
+    topics: component.topics,
+    motionLevel: component.motionLevel,
+    primitiveLibrary: component.primitiveLibrary ?? "none",
+    animationLibrary: component.animationLibrary ?? "none",
+  };
+}
+
+export type ComponentMetadata = {
+  id: string;
+  legacyId: string;
+  name: string;
+  source: ComponentDocument["source"];
+  framework: ComponentDocument["framework"];
+  styling: ComponentDocument["styling"];
+  dependencies: ComponentDocument["dependencies"];
+  intent: string;
+  motionLevel: ComponentDocument["motionLevel"];
+  primitiveLibrary: string;
+  animationLibrary: string;
+};
+
+export function createSampleComponentMetadata(): ComponentMetadata {
+  const component = createSampleComponent();
+  return {
+    id: component.id,
+    legacyId: component.id,
+    name: component.name,
+    source: component.source,
+    framework: component.framework,
+    styling: component.styling,
+    dependencies: component.dependencies,
+    intent: component.intent,
+    motionLevel: component.motionLevel,
+    primitiveLibrary: component.primitiveLibrary ?? "none",
+    animationLibrary: component.animationLibrary ?? "none",
+  };
+}
+
+export type ViewComponent = {
+  schemaVersion: number;
+  id: string;
+  legacyId: string;
+  name: string;
+  source: ComponentDocument["source"];
+  framework: ComponentDocument["framework"];
+  styling: ComponentDocument["styling"];
+  dependencies: ComponentDocument["dependencies"];
+  intent: string;
+  motionLevel: ComponentDocument["motionLevel"];
+  primitiveLibrary: string;
+  animationLibrary: string;
+  constraints?: Record<string, never>;
+  codeSummary: {
+    entryFile: string;
+    fileCount: number;
+  };
+  code?: ComponentDocument["code"];
+};
 
 export function createSampleViewComponent(): ViewComponent {
-  const { capabilities: _capabilities, synonyms: _synonyms, topics: _topics, ...component } =
-    createSampleComponent();
-  return component;
+  const component = createSampleComponent();
+
+  return {
+    schemaVersion: 3,
+    id: component.id,
+    legacyId: component.id,
+    name: component.name,
+    source: component.source,
+    framework: component.framework,
+    styling: component.styling,
+    dependencies: component.dependencies,
+    intent: component.intent,
+    motionLevel: component.motionLevel,
+    primitiveLibrary: component.primitiveLibrary ?? "none",
+    animationLibrary: component.animationLibrary ?? "none",
+    constraints: component.constraints,
+    codeSummary: {
+      entryFile: component.code.entryFile,
+      fileCount: component.code.files.length,
+    },
+    code: component.code,
+  };
 }

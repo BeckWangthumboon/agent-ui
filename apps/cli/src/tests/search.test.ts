@@ -1,33 +1,59 @@
 import { describe, expect, it } from "bun:test";
 
 import { parsePositiveInteger, runSearchCommand } from "../search";
-import { captureCommandOutput, createMockClient, createSampleComponent } from "./helpers";
+import {
+  captureCommandOutput,
+  createMockClient,
+  createSampleComponentMetadata,
+  createSampleSearchCandidate,
+} from "./helpers";
 
 describe("runSearchCommand", () => {
   it("prints ranked text results", async () => {
-    const component = createSampleComponent();
-    const { client, calls } = createMockClient(async () => [component]);
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    let callIndex = 0;
+    const { client, calls } = createMockClient(async () => {
+      callIndex += 1;
+      if (callIndex === 1) {
+        return [candidate];
+      }
+
+      return [metadata];
+    });
 
     const output = await captureCommandOutput(async () => {
       await runSearchCommand("button", { limit: 10 }, client);
     });
 
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(calls[0]?.args).toEqual({
       query: "button",
       filters: undefined,
     });
+    expect(calls[1]?.args).toEqual({
+      ids: [candidate.id],
+    });
 
     expect(output.logs.join("\n")).toContain("1. Button (core-button)");
-    expect(output.logs.join("\n")).toContain("framework: react | styling: tailwind | motion: minimal");
+    expect(output.logs.join("\n")).toContain(
+      "framework: react | styling: tailwind | motion: minimal",
+    );
     expect(output.logs.join("\n")).toContain("dependencies: class-variance-authority (runtime)");
-    expect(output.logs.join("\n")).toContain("source: https://ui.shadcn.com/docs/components/button");
+    expect(output.logs.join("\n")).toContain(
+      "source: https://ui.shadcn.com/docs/components/button",
+    );
     expect(output.errors).toHaveLength(0);
   });
 
   it("prints json payload in --json mode", async () => {
-    const component = createSampleComponent();
-    const { client } = createMockClient(async () => [component]);
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    let callIndex = 0;
+    const { client } = createMockClient(async () => {
+      callIndex += 1;
+      return callIndex === 1 ? [candidate] : [metadata];
+    });
 
     const output = await captureCommandOutput(async () => {
       await runSearchCommand("button", { limit: 5, json: true }, client);

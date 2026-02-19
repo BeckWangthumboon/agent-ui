@@ -1,11 +1,42 @@
 import type { ConvexHttpClient } from "convex/browser";
 import { api } from "../../backend/convex/_generated/api";
-import type { ComponentDocument } from "../../../shared/component-schema";
+import type {
+  ComponentCodeFile,
+  ComponentFramework,
+  ComponentMotion,
+  ComponentSource,
+  ComponentStyling,
+  Dependency,
+} from "../../../shared/component-schema";
 
 export type ViewCliOptions = {
   verbose?: boolean;
   code?: boolean;
   json?: boolean;
+};
+
+type ViewComponent = {
+  schemaVersion: number;
+  id: string;
+  legacyId: string;
+  name: string;
+  source: ComponentSource;
+  framework: ComponentFramework;
+  styling: ComponentStyling;
+  dependencies: Dependency[];
+  intent: string;
+  motionLevel: ComponentMotion;
+  primitiveLibrary: string;
+  animationLibrary: string;
+  constraints?: Record<string, never>;
+  codeSummary: {
+    entryFile: string;
+    fileCount: number;
+  };
+  code?: {
+    entryFile: string;
+    files: ComponentCodeFile[];
+  };
 };
 
 export async function runViewCommand(
@@ -21,9 +52,10 @@ export async function runViewCommand(
     return;
   }
 
-  const component = await client.query(api.search.getById, {
+  const component = (await client.query(api.search.getById, {
     id: normalizedId,
-  });
+    includeCode: Boolean(options.code || options.json),
+  })) as ViewComponent | null;
 
   if (!component) {
     console.error(`Component not found: ${normalizedId}`);
@@ -47,8 +79,6 @@ type PrintOptions = {
   includeCode: boolean;
 };
 
-type ViewComponent = Omit<ComponentDocument, "capabilities" | "synonyms" | "topics">;
-
 function printComponent(component: ViewComponent, options: PrintOptions): void {
   console.log(`${component.name} (${component.id})`);
   console.log(`intent: ${component.intent}`);
@@ -58,6 +88,10 @@ function printComponent(component: ViewComponent, options: PrintOptions): void {
   console.log(`source: ${component.source.url}`);
 
   if (options.verbose) {
+    console.log(`legacy.id: ${component.legacyId}`);
+    console.log(`primitive.library: ${component.primitiveLibrary}`);
+    console.log(`animation.library: ${component.animationLibrary}`);
+
     if (component.source.library) {
       console.log(`source.library: ${component.source.library}`);
     }
@@ -83,20 +117,25 @@ function printComponent(component: ViewComponent, options: PrintOptions): void {
       console.log("dependencies: none");
     }
 
-    console.log(`code.entryFile: ${component.code.entryFile}`);
-    console.log(`code.fileCount: ${component.code.files.length}`);
+    console.log(`code.entryFile: ${component.codeSummary.entryFile}`);
+    console.log(`code.fileCount: ${component.codeSummary.fileCount}`);
   }
 
   if (!options.includeCode) {
     return;
   }
 
+  if (!component.code) {
+    console.log("code: unavailable");
+    return;
+  }
+
   const orderedFiles = [...component.code.files].sort((left, right) => {
-    if (left.path === component.code.entryFile) {
+    if (left.path === component.code?.entryFile) {
       return -1;
     }
 
-    if (right.path === component.code.entryFile) {
+    if (right.path === component.code?.entryFile) {
       return 1;
     }
 

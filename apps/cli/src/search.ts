@@ -25,15 +25,15 @@ type SearchCandidate = Pick<
   ComponentDocument,
   | "id"
   | "name"
-  | "source"
   | "framework"
   | "styling"
-  | "dependencies"
   | "intent"
   | "capabilities"
   | "synonyms"
   | "topics"
   | "motionLevel"
+  | "primitiveLibrary"
+  | "animationLibrary"
 >;
 
 const DEFAULT_LIMIT = 10;
@@ -49,7 +49,6 @@ const FUSE_OPTIONS: IFuseOptions<SearchCandidate> = {
     { name: "capabilities", weight: 0.14 },
     { name: "synonyms", weight: 0.12 },
     { name: "topics", weight: 0.07 },
-    { name: "dependencies.name", weight: 0.04 },
   ],
 };
 
@@ -80,7 +79,8 @@ export async function runSearchCommand(
     filters,
   });
   const limit = normalizeLimit(options.limit);
-  const results = rankResults(candidates, normalizedQuery, limit);
+  const rankedResults = rankResults(candidates, normalizedQuery, limit);
+  const hydratedResults = await hydrateResults(rankedResults, client);
 
   if (options.json) {
     console.log(
@@ -93,8 +93,8 @@ export async function runSearchCommand(
             motion: options.motion,
           },
           candidateCount: candidates.length,
-          resultCount: results.length,
-          results,
+          resultCount: hydratedResults.length,
+          results: hydratedResults,
         },
         null,
         2,
@@ -103,7 +103,7 @@ export async function runSearchCommand(
     return;
   }
 
-  printSearchResults(results);
+  printSearchResults(hydratedResults);
 }
 
 function rankResults(
@@ -119,7 +119,44 @@ function rankResults(
   return fuse.search(query, { limit }).map((result) => result.item);
 }
 
-function printSearchResults(results: SearchCandidate[]): void {
+type SearchResult = SearchCandidate & {
+  source: ComponentDocument["source"];
+  dependencies: ComponentDocument["dependencies"];
+};
+
+type SearchMetadata = {
+  id: string;
+  source: ComponentDocument["source"];
+  dependencies: ComponentDocument["dependencies"];
+};
+
+async function hydrateResults(
+  results: SearchCandidate[],
+  client: ConvexHttpClient,
+): Promise<SearchResult[]> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  const metadata = await client.query(api.components.getMetadataByIds, {
+    ids: results.map((result) => result.id),
+  });
+  const typedMetadata = metadata as SearchMetadata[];
+  const metadataById = new Map(
+    typedMetadata.map((component: SearchMetadata) => [component.id, component]),
+  );
+
+  return results.map((result) => {
+    const component = metadataById.get(result.id);
+    return {
+      ...result,
+      source: component?.source ?? { url: "unknown" },
+      dependencies: component?.dependencies ?? [],
+    };
+  });
+}
+
+function printSearchResults(results: SearchResult[]): void {
   if (results.length === 0) {
     console.log("No matching components found.");
     return;
@@ -129,6 +166,9 @@ function printSearchResults(results: SearchCandidate[]): void {
     console.log(`${index + 1}. ${result.name} (${result.id})`);
     console.log(
       `   framework: ${result.framework} | styling: ${result.styling} | motion: ${result.motionLevel}`,
+    );
+    console.log(
+      `   primitive: ${result.primitiveLibrary ?? "none"} | animation: ${result.animationLibrary ?? "none"}`,
     );
 
     if (result.dependencies.length > 0) {
