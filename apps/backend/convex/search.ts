@@ -25,6 +25,24 @@ type SearchCandidate = Pick<
   | "motionLevel"
 >;
 
+type ViewComponent = Pick<
+  ComponentRecord,
+  | "schemaVersion"
+  | "id"
+  | "name"
+  | "source"
+  | "framework"
+  | "styling"
+  | "dependencies"
+  | "intent"
+  | "capabilities"
+  | "synonyms"
+  | "topics"
+  | "motionLevel"
+  | "constraints"
+  | "code"
+>;
+
 type ComponentFilters = {
   framework?: SearchCandidate["framework"];
   styling?: SearchCandidate["styling"];
@@ -44,6 +62,25 @@ function toSearchCandidate(component: ComponentRecord): SearchCandidate {
     synonyms: component.synonyms,
     topics: component.topics,
     motionLevel: component.motionLevel,
+  };
+}
+
+function toViewComponent(component: ComponentRecord): ViewComponent {
+  return {
+    schemaVersion: component.schemaVersion,
+    id: component.id,
+    name: component.name,
+    source: component.source,
+    framework: component.framework,
+    styling: component.styling,
+    dependencies: component.dependencies,
+    intent: component.intent,
+    capabilities: component.capabilities,
+    synonyms: component.synonyms,
+    topics: component.topics,
+    motionLevel: component.motionLevel,
+    constraints: component.constraints,
+    code: component.code,
   };
 }
 
@@ -115,5 +152,39 @@ export const componentsQuery = query({
         }),
       )
       .map(toSearchCandidate);
+  },
+});
+
+export const getById = query({
+  args: {
+    id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedId = args.id.trim();
+
+    if (normalizedId.length === 0) {
+      throw new Error("Component id must be non-empty.");
+    }
+
+    const exact = await ctx.db
+      .query("components")
+      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", normalizedId))
+      .unique();
+
+    if (exact) {
+      return toViewComponent(exact);
+    }
+
+    const normalizedLower = normalizedId.toLowerCase();
+    const components = await ctx.db.query("components").collect();
+    const insensitiveMatch = components.find(
+      (component) => component.id.toLowerCase() === normalizedLower,
+    );
+
+    if (!insensitiveMatch) {
+      return null;
+    }
+
+    return toViewComponent(insensitiveMatch);
   },
 });
