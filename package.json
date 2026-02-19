@@ -42,8 +42,6 @@
     "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
     "data:export-csv": "bun run scripts/components-data/export-to-csv.ts",
     "data:import-csv": "bun run scripts/components-data/import-from-csv.ts",
-    "data:import-convex": "bun run --cwd apps/backend seed:data",
-    "data:import-convex:dry": "bun run --cwd apps/backend seed:data -- --dry-run",
     "export:csv": "bun run data:export-csv",
     "import:csv": "bun run data:import-csv",
     "eval:search": "bun run scripts/evals/search-benchmark.ts",

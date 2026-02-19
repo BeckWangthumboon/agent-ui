@@ -1,84 +1,85 @@
 import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 import {
+  ComponentAnimationLibraryValidator,
   ComponentFrameworkValidator,
   ComponentMotionValidator,
+  ComponentPrimitiveLibraryValidator,
   ComponentStylingValidator,
 } from "./validators";
 
+type SearchRecord = Doc<"componentSearch">;
 type ComponentRecord = Doc<"components">;
+type ComponentCodeRecord = Doc<"componentCode">;
 
-type SearchCandidate = Pick<
-  ComponentRecord,
-  | "id"
+type SearchCandidate = {
+  id: SearchRecord["componentId"];
+} & Pick<
+  SearchRecord,
   | "name"
-  | "source"
   | "framework"
   | "styling"
-  | "dependencies"
   | "intent"
   | "capabilities"
   | "synonyms"
   | "topics"
   | "motionLevel"
+  | "primitiveLibrary"
+  | "animationLibrary"
 >;
 
-type ViewComponent = Pick<
-  ComponentRecord,
-  | "schemaVersion"
-  | "id"
-  | "name"
-  | "source"
-  | "framework"
-  | "styling"
-  | "dependencies"
-  | "intent"
-  | "motionLevel"
-  | "constraints"
-  | "code"
->;
-
-type ComponentFilters = {
-  framework?: SearchCandidate["framework"];
-  styling?: SearchCandidate["styling"];
-  motion?: SearchCandidate["motionLevel"];
+type ViewComponent = {
+  schemaVersion: ComponentRecord["schemaVersion"];
+  id: ComponentRecord["id"];
+  legacyId: string;
+  name: ComponentRecord["name"];
+  source: ComponentRecord["source"];
+  framework: ComponentRecord["framework"];
+  styling: ComponentRecord["styling"];
+  dependencies: ComponentRecord["dependencies"];
+  intent: ComponentRecord["intent"];
+  motionLevel: ComponentRecord["motionLevel"];
+  primitiveLibrary: string;
+  animationLibrary: string;
+  constraints: ComponentRecord["constraints"];
+  codeSummary: {
+    entryFile: string;
+    fileCount: number;
+  };
+  code?: {
+    entryFile: string;
+    files: ComponentCodeRecord["files"];
+  };
 };
 
-function toSearchCandidate(component: ComponentRecord): SearchCandidate {
+type ComponentFilters = {
+  framework?: SearchRecord["framework"];
+  styling?: SearchRecord["styling"];
+  motion?: SearchRecord["motionLevel"];
+  primitiveLibrary?: SearchRecord["primitiveLibrary"];
+  animationLibrary?: SearchRecord["animationLibrary"];
+};
+
+function toSearchCandidate(component: SearchRecord): SearchCandidate {
   return {
-    id: component.id,
+    id: component.componentId,
     name: component.name,
-    source: component.source,
     framework: component.framework,
     styling: component.styling,
-    dependencies: component.dependencies,
     intent: component.intent,
     capabilities: component.capabilities,
     synonyms: component.synonyms,
     topics: component.topics,
     motionLevel: component.motionLevel,
+    primitiveLibrary: component.primitiveLibrary,
+    animationLibrary: component.animationLibrary,
   };
 }
 
-function toViewComponent(component: ComponentRecord): ViewComponent {
-  return {
-    schemaVersion: component.schemaVersion,
-    id: component.id,
-    name: component.name,
-    source: component.source,
-    framework: component.framework,
-    styling: component.styling,
-    dependencies: component.dependencies,
-    intent: component.intent,
-    motionLevel: component.motionLevel,
-    constraints: component.constraints,
-    code: component.code,
-  };
-}
-
-function matchesFilters(component: ComponentRecord, filters: ComponentFilters): boolean {
+function matchesFilters(component: SearchRecord, filters: ComponentFilters): boolean {
   if (filters.framework && component.framework !== filters.framework) {
     return false;
   }
@@ -91,7 +92,93 @@ function matchesFilters(component: ComponentRecord, filters: ComponentFilters): 
     return false;
   }
 
+  if (filters.primitiveLibrary && component.primitiveLibrary !== filters.primitiveLibrary) {
+    return false;
+  }
+
+  if (filters.animationLibrary && component.animationLibrary !== filters.animationLibrary) {
+    return false;
+  }
+
   return true;
+}
+
+async function findComponentById(ctx: QueryCtx, id: string): Promise<ComponentRecord | null> {
+  const exact = await ctx.db
+    .query("components")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", id))
+    .unique();
+
+  if (exact) {
+    return exact;
+  }
+
+  const legacy = await ctx.db
+    .query("components")
+    .withIndex("by_legacy_component_id", (indexQuery) => indexQuery.eq("legacyId", id))
+    .unique();
+
+  if (legacy) {
+    return legacy;
+  }
+
+  const normalizedLower = id.toLowerCase();
+  const components = await ctx.db.query("components").collect();
+
+  const insensitiveMatch = components.find(
+    (component) =>
+      component.id.toLowerCase() === normalizedLower ||
+      component.legacyId.toLowerCase() === normalizedLower,
+  );
+
+  return insensitiveMatch ?? null;
+}
+
+async function toViewComponent(
+  ctx: QueryCtx,
+  component: ComponentRecord,
+  includeCode: boolean,
+): Promise<ViewComponent> {
+  const base: ViewComponent = {
+    schemaVersion: component.schemaVersion,
+    id: component.id,
+    legacyId: component.legacyId,
+    name: component.name,
+    source: component.source,
+    framework: component.framework,
+    styling: component.styling,
+    dependencies: component.dependencies,
+    intent: component.intent,
+    motionLevel: component.motionLevel,
+    primitiveLibrary: component.primitiveLibrary,
+    animationLibrary: component.animationLibrary,
+    constraints: component.constraints,
+    codeSummary: {
+      entryFile: component.codeEntryFile,
+      fileCount: component.codeFileCount,
+    },
+  };
+
+  if (!includeCode) {
+    return base;
+  }
+
+  const code = await ctx.db
+    .query("componentCode")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
+    .unique();
+
+  if (!code) {
+    return base;
+  }
+
+  return {
+    ...base,
+    code: {
+      entryFile: code.entryFile,
+      files: code.files,
+    },
+  };
 }
 
 export const componentsQuery = query({
@@ -102,6 +189,8 @@ export const componentsQuery = query({
         framework: v.optional(ComponentFrameworkValidator),
         styling: v.optional(ComponentStylingValidator),
         motion: v.optional(ComponentMotionValidator),
+        primitiveLibrary: v.optional(ComponentPrimitiveLibraryValidator),
+        animationLibrary: v.optional(ComponentAnimationLibraryValidator),
       }),
     ),
   },
@@ -116,25 +205,42 @@ export const componentsQuery = query({
     const frameworkFilter = filters.framework;
     const stylingFilter = filters.styling;
     const motionFilter = filters.motion;
-    let componentsFromIndex: ComponentRecord[];
+    const primitiveLibraryFilter = filters.primitiveLibrary;
+    const animationLibraryFilter = filters.animationLibrary;
+
+    let componentsFromIndex: SearchRecord[];
 
     if (frameworkFilter !== undefined) {
       componentsFromIndex = await ctx.db
-        .query("components")
+        .query("componentSearch")
         .withIndex("by_framework", (indexQuery) => indexQuery.eq("framework", frameworkFilter))
         .collect();
     } else if (stylingFilter !== undefined) {
       componentsFromIndex = await ctx.db
-        .query("components")
+        .query("componentSearch")
         .withIndex("by_styling", (indexQuery) => indexQuery.eq("styling", stylingFilter))
         .collect();
     } else if (motionFilter !== undefined) {
       componentsFromIndex = await ctx.db
-        .query("components")
+        .query("componentSearch")
         .withIndex("by_motion_level", (indexQuery) => indexQuery.eq("motionLevel", motionFilter))
         .collect();
+    } else if (primitiveLibraryFilter !== undefined) {
+      componentsFromIndex = await ctx.db
+        .query("componentSearch")
+        .withIndex("by_primitive_library", (indexQuery) =>
+          indexQuery.eq("primitiveLibrary", primitiveLibraryFilter),
+        )
+        .collect();
+    } else if (animationLibraryFilter !== undefined) {
+      componentsFromIndex = await ctx.db
+        .query("componentSearch")
+        .withIndex("by_animation_library", (indexQuery) =>
+          indexQuery.eq("animationLibrary", animationLibraryFilter),
+        )
+        .collect();
     } else {
-      componentsFromIndex = await ctx.db.query("components").collect();
+      componentsFromIndex = await ctx.db.query("componentSearch").collect();
     }
 
     return componentsFromIndex
@@ -143,6 +249,8 @@ export const componentsQuery = query({
           framework: frameworkFilter,
           styling: stylingFilter,
           motion: motionFilter,
+          primitiveLibrary: primitiveLibraryFilter,
+          animationLibrary: animationLibraryFilter,
         }),
       )
       .map(toSearchCandidate);
@@ -152,6 +260,7 @@ export const componentsQuery = query({
 export const getById = query({
   args: {
     id: v.string(),
+    includeCode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const normalizedId = args.id.trim();
@@ -160,25 +269,12 @@ export const getById = query({
       throw new Error("Component id must be non-empty.");
     }
 
-    const exact = await ctx.db
-      .query("components")
-      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", normalizedId))
-      .unique();
+    const component = await findComponentById(ctx, normalizedId);
 
-    if (exact) {
-      return toViewComponent(exact);
-    }
-
-    const normalizedLower = normalizedId.toLowerCase();
-    const components = await ctx.db.query("components").collect();
-    const insensitiveMatch = components.find(
-      (component) => component.id.toLowerCase() === normalizedLower,
-    );
-
-    if (!insensitiveMatch) {
+    if (!component) {
       return null;
     }
 
-    return toViewComponent(insensitiveMatch);
+    return toViewComponent(ctx, component, args.includeCode ?? false);
   },
 });

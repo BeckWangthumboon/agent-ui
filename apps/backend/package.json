@@ -6,9 +6,10 @@
     "dev": "bunx convex dev",
     "generate": "bunx convex dev --once",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "seed:data": "bun run scripts/import-components.ts"
+    "snapshot:data": "bun run scripts/export-convex-snapshot.ts"
   },
   "dependencies": {
+    "@convex-dev/migrations": "^0.3.1",
     "convex": "1.31.7"
   }
 }
