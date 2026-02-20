@@ -37,4 +37,9 @@ data/
 .DS_Store
 
 data
-.agents/
+# ignore all skills by default
+.agents/skills/*
+
+# allow specific skills
+!.agents/skills/component-ingest/
+!.agents/skills/convex/
