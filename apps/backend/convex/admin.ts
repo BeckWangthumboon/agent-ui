@@ -1,58 +1,67 @@
-import { v } from "convex/values";
+import { mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
-import { query } from "./_generated/server";
+import { buildSplitComponentRecords } from "../../../shared/component-schema";
+import { ComponentDocumentValidator } from "./validators";
 
-const SnapshotTableValidator = v.union(
-  v.literal("components"),
-  v.literal("componentCode"),
-  v.literal("componentSearch"),
-);
+type ComponentSearchRecord = Doc<"componentSearch">;
 
-const DEFAULT_PAGE_SIZE = 100;
-const MAX_PAGE_SIZE = 250;
+async function findSearchByComponentId(
+  ctx: MutationCtx,
+  componentId: string,
+): Promise<ComponentSearchRecord | null> {
+  return ctx.db
+    .query("componentSearch")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .unique();
+}
 
-export const exportTablePage = query({
+export const upsert = mutation({
   args: {
-    table: SnapshotTableValidator,
-    cursor: v.optional(v.string()),
-    pageSize: v.optional(v.number()),
+    component: ComponentDocumentValidator,
   },
   handler: async (ctx, args) => {
-    const pageSize = normalizePageSize(args.pageSize);
-    const cursor = args.cursor ?? null;
+    const records = await buildSplitComponentRecords(args.component);
 
-    switch (args.table) {
-      case "components":
-        return ctx.db.query("components").paginate({
-          cursor,
-          numItems: pageSize,
-        });
-      case "componentCode":
-        return ctx.db.query("componentCode").paginate({
-          cursor,
-          numItems: pageSize,
-        });
-      case "componentSearch":
-        return ctx.db.query("componentSearch").paginate({
-          cursor,
-          numItems: pageSize,
-        });
-      default:
-        throw new Error(`Unsupported snapshot table: ${String(args.table)}`);
+    const existingMetadata = await ctx.db
+      .query("components")
+      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", records.metadata.id))
+      .unique();
+
+    if (existingMetadata) {
+      await ctx.db.replace(existingMetadata._id, records.metadata);
+    } else {
+      await ctx.db.insert("components", records.metadata);
     }
+
+    const existingCode = await ctx.db
+      .query("componentCode")
+      .withIndex("by_component_id", (indexQuery) =>
+        indexQuery.eq("componentId", records.code.componentId),
+      )
+      .unique();
+
+    if (existingCode) {
+      await ctx.db.replace(existingCode._id, records.code);
+    } else {
+      await ctx.db.insert("componentCode", records.code);
+    }
+
+    const existingSearch = await findSearchByComponentId(ctx, records.search.componentId);
+
+    if (existingSearch) {
+      await ctx.db.replace(existingSearch._id, records.search);
+      return {
+        status: "updated",
+        componentId: records.metadata.id,
+      };
+    }
+
+    await ctx.db.insert("componentSearch", records.search);
+    return {
+      status: "inserted",
+      componentId: records.metadata.id,
+    };
   },
 });
-
-function normalizePageSize(value: number | undefined): number {
-  if (!Number.isFinite(value) || value === undefined) {
-    return DEFAULT_PAGE_SIZE;
-  }
-
-  const floored = Math.floor(value);
-
-  if (floored <= 0) {
-    return DEFAULT_PAGE_SIZE;
-  }
-
-  return Math.min(floored, MAX_PAGE_SIZE);
-}
