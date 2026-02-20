@@ -43,4 +43,10 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    files: ["apps/web/src/routes/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 ]);
