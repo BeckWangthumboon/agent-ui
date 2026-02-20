@@ -139,7 +139,6 @@ export function createSampleSearchCandidate(): SearchCandidate {
 
 export type ComponentMetadata = {
   id: string;
-  legacyId: string;
   name: string;
   source: ComponentDocument["source"];
   framework: ComponentDocument["framework"];
@@ -155,7 +154,6 @@ export function createSampleComponentMetadata(): ComponentMetadata {
   const component = createSampleComponent();
   return {
     id: component.id,
-    legacyId: component.id,
     name: component.name,
     source: component.source,
     framework: component.framework,
@@ -171,7 +169,6 @@ export function createSampleComponentMetadata(): ComponentMetadata {
 export type ViewComponent = {
   schemaVersion: number;
   id: string;
-  legacyId: string;
   name: string;
   source: ComponentDocument["source"];
   framework: ComponentDocument["framework"];
@@ -193,9 +190,8 @@ export function createSampleViewComponent(): ViewComponent {
   const component = createSampleComponent();
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: component.id,
-    legacyId: component.id,
     name: component.name,
     source: component.source,
     framework: component.framework,

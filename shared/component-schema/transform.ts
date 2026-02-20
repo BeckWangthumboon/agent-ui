@@ -101,43 +101,33 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
   const animationLibrary = detectAnimationLibrary(component);
 
   const metadata: ComponentMetadataDocument = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id,
-    legacyId: component.id,
     name: component.name,
     source: component.source,
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
-    intent: component.intent,
     motionLevel: component.motionLevel,
     primitiveLibrary,
     animationLibrary,
     constraints: component.constraints,
-    codeEntryFile: component.code.entryFile,
-    codeFileCount: component.code.files.length,
   };
 
   const code: ComponentCodeDocument = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     componentId: id,
     entryFile: component.code.entryFile,
     files: component.code.files,
   };
 
   const search: ComponentSearchDocument = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     componentId: id,
-    name: component.name,
-    framework: component.framework,
-    styling: component.styling,
     intent: component.intent,
     capabilities: component.capabilities,
     synonyms: component.synonyms,
     topics: component.topics,
-    motionLevel: component.motionLevel,
-    primitiveLibrary,
-    animationLibrary,
   };
 
   return {

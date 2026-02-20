@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
@@ -7,47 +7,82 @@ import { buildSplitComponentRecords } from "../../../shared/component-schema";
 import { ComponentDocumentValidator } from "./validators";
 
 type ComponentRecord = Doc<"components">;
+type ComponentSearchRecord = Doc<"componentSearch">;
+
+type ComponentAnnotations = Pick<
+  ComponentSearchRecord,
+  "intent" | "capabilities" | "synonyms" | "topics"
+>;
 
 type ComponentMetadata = Pick<
   ComponentRecord,
-  "id" | "name" | "source" | "framework" | "styling" | "dependencies" | "intent" | "motionLevel"
-> & {
-  legacyId: string;
-  primitiveLibrary: string;
-  animationLibrary: string;
-};
+  | "id"
+  | "name"
+  | "source"
+  | "framework"
+  | "styling"
+  | "dependencies"
+  | "motionLevel"
+  | "primitiveLibrary"
+  | "animationLibrary"
+  | "constraints"
+> &
+  ComponentAnnotations;
 
 type ComponentDirectorySource = Pick<ComponentRecord["source"], "library" | "author">;
 
-type ComponentDirectoryItem = Pick<ComponentRecord, "id" | "name" | "intent" | "motionLevel"> & {
-  legacyId: string;
-  primitiveLibrary: string;
-  animationLibrary: string;
+type ComponentDirectoryItem = Pick<
+  ComponentRecord,
+  "id" | "name" | "motionLevel" | "primitiveLibrary" | "animationLibrary"
+> & {
+  intent: string;
   source: ComponentDirectorySource;
 };
 
-function toComponentMetadata(component: ComponentRecord): ComponentMetadata {
+function toFallbackIntent(componentName: string): string {
+  const trimmedName = componentName.trim();
+  return trimmedName.length > 0 ? trimmedName : "Unnamed component";
+}
+
+function toAnnotations(
+  search: ComponentSearchRecord | null | undefined,
+  componentName: string,
+): ComponentAnnotations {
+  return {
+    intent: search?.intent ?? toFallbackIntent(componentName),
+    capabilities: search?.capabilities ?? [],
+    synonyms: search?.synonyms ?? [],
+    topics: search?.topics ?? [],
+  };
+}
+
+function toComponentMetadata(
+  component: ComponentRecord,
+  search: ComponentSearchRecord | null | undefined,
+): ComponentMetadata {
   return {
     id: component.id,
-    legacyId: component.legacyId,
     name: component.name,
     source: component.source,
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
-    intent: component.intent,
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary,
     animationLibrary: component.animationLibrary,
+    constraints: component.constraints,
+    ...toAnnotations(search, component.name),
   };
 }
 
-function toDirectoryItem(component: ComponentRecord): ComponentDirectoryItem {
+function toDirectoryItem(
+  component: ComponentRecord,
+  search: ComponentSearchRecord | null | undefined,
+): ComponentDirectoryItem {
   return {
     id: component.id,
-    legacyId: component.legacyId,
     name: component.name,
-    intent: component.intent,
+    intent: toAnnotations(search, component.name).intent,
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary,
     animationLibrary: component.animationLibrary,
@@ -58,13 +93,47 @@ function toDirectoryItem(component: ComponentRecord): ComponentDirectoryItem {
   };
 }
 
+async function findComponentById(ctx: QueryCtx, id: string): Promise<ComponentRecord | null> {
+  const exact = await ctx.db
+    .query("components")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", id))
+    .unique();
+
+  if (exact) {
+    return exact;
+  }
+
+  const normalizedLower = id.toLowerCase();
+  const components = await ctx.db.query("components").collect();
+  const insensitiveMatch = components.find(
+    (component) => component.id.toLowerCase() === normalizedLower,
+  );
+  return insensitiveMatch ?? null;
+}
+
+async function findSearchByComponentId(
+  ctx: QueryCtx | MutationCtx,
+  componentId: string,
+): Promise<ComponentSearchRecord | null> {
+  return ctx.db
+    .query("componentSearch")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .unique();
+}
+
 export const listDirectory = query({
   args: {},
   handler: async (ctx) => {
-    const components = await ctx.db.query("components").collect();
+    const [components, searchRecords] = await Promise.all([
+      ctx.db.query("components").collect(),
+      ctx.db.query("componentSearch").collect(),
+    ]);
+    const searchByComponentId = new Map(
+      searchRecords.map((searchRecord) => [searchRecord.componentId, searchRecord]),
+    );
 
     return components
-      .map(toDirectoryItem)
+      .map((component) => toDirectoryItem(component, searchByComponentId.get(component.id)))
       .sort((left, right) => left.name.localeCompare(right.name, "en"));
   },
 });
@@ -80,37 +149,14 @@ export const getMetadataById = query({
       throw new Error("Component id must be non-empty.");
     }
 
-    const exact = await ctx.db
-      .query("components")
-      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", normalizedId))
-      .unique();
+    const component = await findComponentById(ctx, normalizedId);
 
-    if (exact) {
-      return toComponentMetadata(exact);
-    }
-
-    const legacy = await ctx.db
-      .query("components")
-      .withIndex("by_legacy_component_id", (indexQuery) => indexQuery.eq("legacyId", normalizedId))
-      .unique();
-
-    if (legacy) {
-      return toComponentMetadata(legacy);
-    }
-
-    const normalizedLower = normalizedId.toLowerCase();
-    const components = await ctx.db.query("components").collect();
-    const insensitiveMatch = components.find(
-      (component) =>
-        component.id.toLowerCase() === normalizedLower ||
-        component.legacyId.toLowerCase() === normalizedLower,
-    );
-
-    if (!insensitiveMatch) {
+    if (!component) {
       return null;
     }
 
-    return toComponentMetadata(insensitiveMatch);
+    const search = await findSearchByComponentId(ctx, component.id);
+    return toComponentMetadata(component, search);
   },
 });
 
@@ -135,9 +181,12 @@ export const getMetadataByIds = query({
         .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", id))
         .unique();
 
-      if (component) {
-        results.push(toComponentMetadata(component));
+      if (!component) {
+        continue;
       }
+
+      const search = await findSearchByComponentId(ctx, component.id);
+      results.push(toComponentMetadata(component, search));
     }
 
     return results;
@@ -151,19 +200,10 @@ export const upsert = mutation({
   handler: async (ctx, args) => {
     const records = await buildSplitComponentRecords(args.component);
 
-    let existingMetadata = await ctx.db
+    const existingMetadata = await ctx.db
       .query("components")
       .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", records.metadata.id))
       .unique();
-
-    if (!existingMetadata) {
-      existingMetadata = await ctx.db
-        .query("components")
-        .withIndex("by_legacy_component_id", (indexQuery) =>
-          indexQuery.eq("legacyId", records.metadata.legacyId),
-        )
-        .unique();
-    }
 
     if (existingMetadata) {
       await ctx.db.replace(existingMetadata._id, records.metadata);
@@ -184,19 +224,13 @@ export const upsert = mutation({
       await ctx.db.insert("componentCode", records.code);
     }
 
-    const existingSearch = await ctx.db
-      .query("componentSearch")
-      .withIndex("by_component_id", (indexQuery) =>
-        indexQuery.eq("componentId", records.search.componentId),
-      )
-      .unique();
+    const existingSearch = await findSearchByComponentId(ctx, records.search.componentId);
 
     if (existingSearch) {
       await ctx.db.replace(existingSearch._id, records.search);
       return {
         status: "updated",
         componentId: records.metadata.id,
-        legacyId: records.metadata.legacyId,
       };
     }
 
@@ -204,7 +238,6 @@ export const upsert = mutation({
     return {
       status: "inserted",
       componentId: records.metadata.id,
-      legacyId: records.metadata.legacyId,
     };
   },
 });
@@ -245,9 +278,11 @@ async function deleteAll(ctx: MutationCtx): Promise<{
   componentCodeDeleted: number;
   componentSearchDeleted: number;
 }> {
-  const metadata = await ctx.db.query("components").collect();
-  const code = await ctx.db.query("componentCode").collect();
-  const search = await ctx.db.query("componentSearch").collect();
+  const [metadata, code, search] = await Promise.all([
+    ctx.db.query("components").collect(),
+    ctx.db.query("componentCode").collect(),
+    ctx.db.query("componentSearch").collect(),
+  ]);
 
   for (const document of metadata) {
     await ctx.db.delete(document._id);

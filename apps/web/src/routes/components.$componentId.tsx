@@ -28,7 +28,6 @@ type ComponentSource = {
 
 type ComponentMetadata = {
   id: string;
-  legacyId: string;
   name: string;
   source: ComponentSource;
   framework: string;
@@ -101,7 +100,6 @@ function SelectedLayout(props: { component: ComponentMetadata }) {
       <div className="space-y-4 rounded-xl border bg-card p-5">
         <div className="space-y-3 text-sm">
           <MetadataRow label="ID" value={component.id} />
-          <MetadataRow label="Legacy ID" value={component.legacyId} />
           <MetadataRow label="Framework" value={component.framework} />
           <MetadataRow label="Styling" value={component.styling} />
           <MetadataRow label="Motion" value={component.motionLevel} />

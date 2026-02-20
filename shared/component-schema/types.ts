@@ -107,28 +107,24 @@ export const ComponentDocumentValidator = v.object(componentDocumentFields);
 export type ComponentDocument = Infer<typeof ComponentDocumentValidator>;
 
 export const componentMetadataFields = {
-  schemaVersion: v.literal(3),
+  schemaVersion: v.literal(4),
   id: v.string(),
-  legacyId: v.string(),
   name: v.string(),
   source: ComponentSourceValidator,
   framework: ComponentFrameworkValidator,
   styling: ComponentStylingValidator,
   dependencies: v.array(DependencyValidator),
-  intent: v.string(),
   motionLevel: ComponentMotionValidator,
   primitiveLibrary: ComponentPrimitiveLibraryValidator,
   animationLibrary: ComponentAnimationLibraryValidator,
   constraints: v.optional(ComponentConstraintsValidator),
-  codeEntryFile: v.string(),
-  codeFileCount: v.number(),
 } as const;
 
 export const ComponentMetadataDocumentValidator = v.object(componentMetadataFields);
 export type ComponentMetadataDocument = Infer<typeof ComponentMetadataDocumentValidator>;
 
 export const componentCodeFields = {
-  schemaVersion: v.literal(3),
+  schemaVersion: v.literal(4),
   componentId: v.string(),
   entryFile: v.string(),
   files: v.array(ComponentCodeFileValidator),
@@ -138,25 +134,18 @@ export const ComponentCodeDocumentValidator = v.object(componentCodeFields);
 export type ComponentCodeDocument = Infer<typeof ComponentCodeDocumentValidator>;
 
 export const componentSearchFields = {
-  schemaVersion: v.literal(3),
+  schemaVersion: v.literal(4),
   componentId: v.string(),
-  name: v.string(),
-  framework: ComponentFrameworkValidator,
-  styling: ComponentStylingValidator,
   intent: v.string(),
   capabilities: v.array(v.string()),
   synonyms: v.array(v.string()),
   topics: v.array(ComponentTopicValidator),
-  motionLevel: ComponentMotionValidator,
-  primitiveLibrary: ComponentPrimitiveLibraryValidator,
-  animationLibrary: ComponentAnimationLibraryValidator,
 } as const;
 
 export const ComponentSearchDocumentValidator = v.object(componentSearchFields);
 export type ComponentSearchDocument = Infer<typeof ComponentSearchDocumentValidator>;
 
 const NonEmptyTextSchema = z.string().trim().min(1);
-const NonNegativeIntegerSchema = z.number().int().min(0);
 
 const RelativeFilePathSchema = NonEmptyTextSchema.refine(
   (value) => {
@@ -260,44 +249,34 @@ export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObj
 
 export const ComponentMetadataDocumentSchema: z.ZodType<ComponentMetadataDocument> = z.strictObject(
   {
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     id: NonEmptyTextSchema,
-    legacyId: NonEmptyTextSchema,
     name: NonEmptyTextSchema,
     source: ComponentSourceSchema,
     framework: ComponentFrameworkSchema,
     styling: ComponentStylingSchema,
     dependencies: z.array(DependencySchema).default([]),
-    intent: NonEmptyTextSchema,
     motionLevel: ComponentMotionSchema,
     primitiveLibrary: ComponentPrimitiveLibrarySchema,
     animationLibrary: ComponentAnimationLibrarySchema,
     constraints: ComponentConstraintsSchema.optional(),
-    codeEntryFile: RelativeFilePathSchema,
-    codeFileCount: NonNegativeIntegerSchema,
   },
 );
 
 export const ComponentCodeDocumentSchema: z.ZodType<ComponentCodeDocument> = z.strictObject({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   componentId: NonEmptyTextSchema,
   entryFile: RelativeFilePathSchema,
   files: z.array(ComponentCodeFileSchema).min(1),
 });
 
 export const ComponentSearchDocumentSchema: z.ZodType<ComponentSearchDocument> = z.strictObject({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   componentId: NonEmptyTextSchema,
-  name: NonEmptyTextSchema,
-  framework: ComponentFrameworkSchema,
-  styling: ComponentStylingSchema,
   intent: NonEmptyTextSchema,
   capabilities: z.array(NonEmptyTextSchema).default([]),
   synonyms: z.array(NonEmptyTextSchema).default([]),
   topics: z.array(ComponentTopicSchema).default([]),
-  motionLevel: ComponentMotionSchema,
-  primitiveLibrary: ComponentPrimitiveLibrarySchema,
-  animationLibrary: ComponentAnimationLibrarySchema,
 });
 
 export function parseComponentDocument(input: unknown): ComponentDocument {

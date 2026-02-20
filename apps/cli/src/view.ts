@@ -18,7 +18,6 @@ export type ViewCliOptions = {
 type ViewComponent = {
   schemaVersion: number;
   id: string;
-  legacyId: string;
   name: string;
   source: ComponentSource;
   framework: ComponentFramework;
@@ -88,7 +87,6 @@ function printComponent(component: ViewComponent, options: PrintOptions): void {
   console.log(`source: ${component.source.url}`);
 
   if (options.verbose) {
-    console.log(`legacy.id: ${component.legacyId}`);
     console.log(`primitive.library: ${component.primitiveLibrary}`);
     console.log(`animation.library: ${component.animationLibrary}`);
 
