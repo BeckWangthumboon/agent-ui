@@ -6,18 +6,21 @@ import { api } from "../../backend/convex/_generated/api";
 import {
   ComponentFrameworkSchema,
   ComponentMotionSchema,
+  ComponentPrimitiveLibrarySchema,
   ComponentStylingSchema,
   type ComponentDocument,
   type ComponentFramework,
   type ComponentMotion,
+  type ComponentPrimitiveLibrary,
   type ComponentStyling,
 } from "../../../shared/component-schema";
 
 export type SearchCliOptions = {
-  limit: number;
+  limit?: number;
   framework?: ComponentFramework;
   styling?: ComponentStyling;
-  motion?: ComponentMotion;
+  motion?: ComponentMotion[];
+  primitiveLibrary?: ComponentPrimitiveLibrary[];
   json?: boolean;
 };
 
@@ -65,21 +68,23 @@ export async function runSearchCommand(
     return;
   }
 
-  const hasFilters = options.framework || options.styling || options.motion;
-  const filters = hasFilters
-    ? {
-        framework: options.framework,
-        styling: options.styling,
-        motion: options.motion,
-      }
-    : undefined;
+  const motionFilters = normalizeFilterValues(options.motion);
+  const primitiveLibraryFilters = normalizeFilterValues(options.primitiveLibrary);
+
+  const filters = buildBackendFilters(options, motionFilters, primitiveLibraryFilters);
 
   const candidates = await client.query(api.search.componentsQuery, {
     query: normalizedQuery,
     filters,
   });
+  const filteredCandidates = candidates.filter((candidate) =>
+    matchesLocalFilters(candidate, {
+      motion: motionFilters,
+      primitiveLibrary: primitiveLibraryFilters,
+    }),
+  );
   const limit = normalizeLimit(options.limit);
-  const rankedResults = rankResults(candidates, normalizedQuery, limit);
+  const rankedResults = rankResults(filteredCandidates, normalizedQuery, limit);
   const hydratedResults = await hydrateResults(rankedResults, client);
 
   if (options.json) {
@@ -90,9 +95,10 @@ export async function runSearchCommand(
           filters: {
             framework: options.framework,
             styling: options.styling,
-            motion: options.motion,
+            motion: motionFilters,
+            primitiveLibrary: primitiveLibraryFilters,
           },
-          candidateCount: candidates.length,
+          candidateCount: filteredCandidates.length,
           resultCount: hydratedResults.length,
           results: hydratedResults,
         },
@@ -193,6 +199,64 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.floor(limit);
 }
 
+type LocalFilterOptions = {
+  motion?: ComponentMotion[];
+  primitiveLibrary?: ComponentPrimitiveLibrary[];
+};
+
+function normalizeFilterValues<TValue extends string>(
+  values: TValue[] | undefined,
+): TValue[] | undefined {
+  if (!values || values.length === 0) {
+    return undefined;
+  }
+
+  return [...new Set(values)];
+}
+
+function buildBackendFilters(
+  options: SearchCliOptions,
+  motionFilters: ComponentMotion[] | undefined,
+  primitiveLibraryFilters: ComponentPrimitiveLibrary[] | undefined,
+) {
+  const candidateFilters: {
+    framework?: ComponentFramework;
+    styling?: ComponentStyling;
+    motion?: ComponentMotion;
+    primitiveLibrary?: ComponentPrimitiveLibrary;
+  } = {
+    framework: options.framework,
+    styling: options.styling,
+    motion: motionFilters?.length === 1 ? motionFilters[0] : undefined,
+    primitiveLibrary:
+      primitiveLibraryFilters?.length === 1 ? primitiveLibraryFilters[0] : undefined,
+  };
+
+  if (
+    candidateFilters.framework === undefined &&
+    candidateFilters.styling === undefined &&
+    candidateFilters.motion === undefined &&
+    candidateFilters.primitiveLibrary === undefined
+  ) {
+    return undefined;
+  }
+
+  return candidateFilters;
+}
+
+function matchesLocalFilters(candidate: SearchCandidate, filters: LocalFilterOptions): boolean {
+  if (filters.motion && !filters.motion.includes(candidate.motionLevel)) {
+    return false;
+  }
+
+  const primitiveLibrary = candidate.primitiveLibrary ?? "none";
+  if (filters.primitiveLibrary && !filters.primitiveLibrary.includes(primitiveLibrary)) {
+    return false;
+  }
+
+  return true;
+}
+
 export function parsePositiveInteger(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -211,4 +275,24 @@ export function parseStyling(value: string): ComponentStyling {
 
 export function parseMotion(value: string): ComponentMotion {
   return ComponentMotionSchema.parse(value.trim().toLowerCase());
+}
+
+export function collectMotion(
+  value: string,
+  previous: ComponentMotion[] | undefined,
+): ComponentMotion[] {
+  const parsed = parseMotion(value);
+  return previous ? [...previous, parsed] : [parsed];
+}
+
+export function parsePrimitiveLibrary(value: string): ComponentPrimitiveLibrary {
+  return ComponentPrimitiveLibrarySchema.parse(value.trim().toLowerCase());
+}
+
+export function collectPrimitiveLibrary(
+  value: string,
+  previous: ComponentPrimitiveLibrary[] | undefined,
+): ComponentPrimitiveLibrary[] {
+  const parsed = parsePrimitiveLibrary(value);
+  return previous ? [...previous, parsed] : [parsed];
 }

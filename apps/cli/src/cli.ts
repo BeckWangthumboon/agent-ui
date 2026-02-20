@@ -2,37 +2,60 @@ import { Command } from "commander";
 import { ConvexHttpClient } from "convex/browser";
 import {
   runSearchCommand,
+  collectMotion,
+  collectPrimitiveLibrary,
   parsePositiveInteger,
   parseFramework,
   parseStyling,
-  parseMotion,
   type SearchCliOptions,
 } from "./search.js";
 import { runViewCommand, type ViewCliOptions } from "./view.js";
+import { loadAgentUiConfig, mergeSearchOptions } from "./config.js";
 
 const program = new Command();
 
 program
   .name("component-search")
   .description("Search component metadata via Convex + Fuse")
-  .showHelpAfterError();
+  .showHelpAfterError()
+  .option("--config <path>", "Path to agent-ui config file");
 
 program
   .command("search")
   .description("Search component metadata")
   .argument("<query>", "Search query (required)")
-  .option("-l, --limit <number>", "Maximum number of results", parsePositiveInteger, 10)
+  .option("-l, --limit <number>", "Maximum number of results", parsePositiveInteger)
   .option("--framework <framework>", "Filter by framework", parseFramework)
   .option("--styling <styling>", "Filter by styling", parseStyling)
-  .option("--motion <motion>", "Filter by motion level", parseMotion)
-  .option("--json", "Output JSON", false)
-  .action(async (query: string, options: SearchCliOptions) => {
+  .option("--motion <motion>", "Filter by motion level (repeatable)", collectMotion)
+  .option(
+    "--primitive-library <library>",
+    "Filter by primitive library (repeatable)",
+    collectPrimitiveLibrary,
+  )
+  .option("--json", "Output JSON")
+  .action(async (query: string, options: SearchCliOptions, command: Command) => {
+    const globalOptions = command.optsWithGlobals<{ config?: string }>();
+    let mergedOptions: SearchCliOptions;
+
+    try {
+      const { config } = await loadAgentUiConfig({
+        commandName: "search",
+        explicitPath: globalOptions.config,
+      });
+      mergedOptions = mergeSearchOptions(options, config);
+    } catch (error) {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+      return;
+    }
+
     const client = createClient();
     if (!client) {
       return;
     }
 
-    await runSearchCommand(query, options, client);
+    await runSearchCommand(query, mergedOptions, client);
   });
 
 program
@@ -40,9 +63,9 @@ program
   .alias("v")
   .description("View detailed component metadata by id")
   .argument("<id>", "Component id (required)")
-  .option("--verbose", "Show expanded metadata", false)
-  .option("--code", "Print component code", false)
-  .option("--json", "Output JSON", false)
+  .option("--verbose", "Show expanded metadata")
+  .option("--code", "Print component code")
+  .option("--json", "Output JSON")
   .action(async (id: string, options: ViewCliOptions) => {
     const client = createClient();
     if (!client) {
@@ -63,4 +86,12 @@ function createClient(): ConvexHttpClient | null {
   }
 
   return new ConvexHttpClient(convexUrl);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }

@@ -65,7 +65,68 @@ describe("runSearchCommand", () => {
     expect(payload.query).toBe("button");
     expect(payload.candidateCount).toBe(1);
     expect(payload.resultCount).toBe(1);
+    expect(payload.filters.motion).toBeUndefined();
+    expect(payload.filters.primitiveLibrary).toBeUndefined();
     expect(payload.results[0].id).toBe("core-button");
+  });
+
+  it("supports list filters for motion and primitive library", async () => {
+    const first = {
+      ...createSampleSearchCandidate(),
+      primitiveLibrary: "radix" as const,
+    };
+    const second = {
+      ...createSampleSearchCandidate(),
+      id: "core-dialog",
+      name: "Dialog",
+      motionLevel: "heavy" as const,
+      primitiveLibrary: "other" as const,
+    };
+    const metadata = [
+      {
+        ...createSampleComponentMetadata(),
+        primitiveLibrary: "radix",
+      },
+      {
+        ...createSampleComponentMetadata(),
+        id: "core-dialog",
+        name: "Dialog",
+        motionLevel: "heavy" as const,
+        primitiveLibrary: "other",
+        source: { url: "https://example.com/dialog" },
+      },
+    ];
+    let callIndex = 0;
+    const { client, calls } = createMockClient(async () => {
+      callIndex += 1;
+      return callIndex === 1 ? [first, second] : metadata;
+    });
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand(
+        "button",
+        {
+          limit: 10,
+          motion: ["none", "minimal"],
+          primitiveLibrary: ["radix", "base-ui"],
+          json: true,
+        },
+        client,
+      );
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.args).toEqual({
+      query: "button",
+      filters: undefined,
+    });
+
+    const payload = JSON.parse(output.logs[0] ?? "{}");
+    expect(payload.candidateCount).toBe(1);
+    expect(payload.resultCount).toBe(1);
+    expect(payload.results[0].id).toBe("core-button");
+    expect(payload.filters.motion).toEqual(["none", "minimal"]);
+    expect(payload.filters.primitiveLibrary).toEqual(["radix", "base-ui"]);
   });
 
   it("rejects empty queries", async () => {
