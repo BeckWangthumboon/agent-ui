@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, Outlet, createFileRoute, useMatchRoute } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { api } from "@backend/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ export const Route = createFileRoute("/components/$componentId")({
 
 function ComponentMetadataPage() {
   const { componentId } = Route.useParams();
+  const matchRoute = useMatchRoute();
   const component = useQuery(api.components.getMetadataById, { id: componentId });
 
   if (component === undefined) {
@@ -79,6 +80,17 @@ function ComponentMetadataPage() {
         </CardFooter>
       </Card>
     );
+  }
+
+  const isEditRoute = Boolean(
+    matchRoute({
+      to: "/components/$componentId/edit",
+      params: { componentId },
+    }),
+  );
+
+  if (isEditRoute) {
+    return <Outlet />;
   }
 
   return <SelectedLayout component={component} />;
