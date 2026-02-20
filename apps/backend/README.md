@@ -5,7 +5,7 @@ This workspace owns Convex schema and backend functions.
 ## Commands
 
 - `bun run --cwd apps/backend dev` - start Convex dev, generate local project wiring.
-- `bun run --cwd apps/backend snapshot:data` - export a JSON snapshot of Convex tables to `data/snapshots/`.
+- `bun run --cwd apps/backend sync:data` - overwrite `data/components/` with the latest Convex component documents and code files.
 - `bun run --cwd apps/backend validate:data` - validate Convex table rows and cross-table integrity.
 
 ## Validate data

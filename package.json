@@ -43,9 +43,7 @@
     "data:export-csv": "bun run scripts/components-data/export-to-csv.ts",
     "data:import-csv": "bun run scripts/components-data/import-from-csv.ts",
     "export:csv": "bun run data:export-csv",
-    "import:csv": "bun run data:import-csv",
-    "eval:search": "bun run scripts/evals/search-benchmark.ts",
-    "eval:search:sweep": "bun run scripts/evals/search-benchmark.ts --sweep"
+    "import:csv": "bun run data:import-csv"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
