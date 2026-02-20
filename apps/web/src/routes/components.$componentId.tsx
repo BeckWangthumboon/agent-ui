@@ -90,9 +90,16 @@ function SelectedLayout(props: { component: ComponentMetadata }) {
   return (
     <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
       <div className="space-y-4 rounded-xl border bg-card p-5">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">{component.name}</h2>
-          <p className="mt-2 text-sm text-muted-foreground">{component.intent}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight">{component.name}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{component.intent}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/components/$componentId/edit" params={{ componentId: component.id }}>
+              Edit
+            </Link>
+          </Button>
         </div>
         <PreviewPlaceholder label="Preview area" className="min-h-56" />
       </div>
