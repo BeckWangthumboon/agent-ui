@@ -117,11 +117,18 @@ function SelectedLayout(props: { component: ComponentMetadata }) {
           <MetadataRow label="Repo" value={component.source.repo ?? "N/A"} />
           <MetadataRow label="Author" value={component.source.author ?? "N/A"} />
           <MetadataRow label="License" value={component.source.license ?? "N/A"} />
-          <Button asChild variant="outline" size="sm">
-            <a href={component.source.url} target="_blank" rel="noreferrer">
-              Open source page
-            </a>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href={component.source.url} target="_blank" rel="noreferrer">
+                Open source page
+              </a>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/components/$componentId/edit" params={{ componentId: component.id }}>
+                Edit metadata
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
     </section>
