@@ -1,11 +1,16 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { v } from "convex/values";
 
 import { buildSplitComponentRecords } from "../../../shared/component-schema";
 import { ComponentDocumentValidator } from "./validators";
 
 type ComponentSearchRecord = Doc<"componentSearch">;
+type ExportableTable = "components" | "componentCode" | "componentSearch";
+
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 500;
 
 async function findSearchByComponentId(
   ctx: MutationCtx,
@@ -16,6 +21,40 @@ async function findSearchByComponentId(
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .unique();
 }
+
+function normalizePageSize(rawPageSize: number | undefined): number {
+  if (rawPageSize === undefined || !Number.isFinite(rawPageSize)) {
+    return DEFAULT_PAGE_SIZE;
+  }
+
+  const rounded = Math.floor(rawPageSize);
+  if (rounded <= 0) {
+    return DEFAULT_PAGE_SIZE;
+  }
+
+  return Math.min(rounded, MAX_PAGE_SIZE);
+}
+
+export const exportTablePage = query({
+  args: {
+    table: v.union(
+      v.literal("components"),
+      v.literal("componentCode"),
+      v.literal("componentSearch"),
+    ),
+    cursor: v.optional(v.string()),
+    pageSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const table: ExportableTable = args.table;
+    const pageSize = normalizePageSize(args.pageSize);
+
+    return ctx.db.query(table).paginate({
+      numItems: pageSize,
+      cursor: args.cursor ?? null,
+    });
+  },
+});
 
 export const upsert = mutation({
   args: {
