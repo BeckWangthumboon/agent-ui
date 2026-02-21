@@ -1,4 +1,4 @@
-import { resolve as resolvePath } from "node:path";
+import { join, resolve as resolvePath } from "node:path";
 import { z } from "zod";
 
 import {
@@ -7,10 +7,12 @@ import {
   ComponentPrimitiveLibrarySchema,
   ComponentStylingSchema,
 } from "../../../shared/component-schema";
+import { resolveAgentsDirectory } from "./project.js";
 import { exists, readJson, writeJsonAtomic } from "./fsUtils.js";
 import type { SearchCliOptions } from "./search.js";
 
 export const DEFAULT_CONFIG_RELATIVE_PATH = ".agents/agent-ui.json";
+const DEFAULT_CONFIG_FILENAME = "agent-ui.json";
 
 const SearchConfigSchema = z
   .strictObject({
@@ -54,19 +56,23 @@ export type LoadedAgentUiConfig = {
   createdDefault: boolean;
 };
 
-export function resolveConfigPath(explicitPath?: string, cwd = process.cwd()): string {
-  return resolvePath(cwd, explicitPath ?? DEFAULT_CONFIG_RELATIVE_PATH);
+export async function resolveConfigPath(explicitPath?: string, cwd = process.cwd()) {
+  if (explicitPath) {
+    return resolvePath(cwd, explicitPath);
+  }
+
+  const { agentsDir } = await resolveAgentsDirectory({ cwd });
+  return join(agentsDir, DEFAULT_CONFIG_FILENAME);
 }
 
-export async function loadAgentUiConfig(
-  input: LoadAgentUiConfigInput,
-): Promise<LoadedAgentUiConfig> {
-  const configPath = resolveConfigPath(input.explicitPath, input.cwd);
+export async function loadAgentUiConfig(input: LoadAgentUiConfigInput) {
+  const configPath = await resolveConfigPath(input.explicitPath, input.cwd);
   const isDefaultPath = input.explicitPath === undefined;
   const configExists = await exists(configPath);
 
   if (!configExists) {
     if (isDefaultPath && input.commandName === "search") {
+      await resolveAgentsDirectory({ cwd: input.cwd, createIfMissing: true });
       await writeJsonAtomic(configPath, DEFAULT_AGENT_UI_CONFIG);
       return {
         configPath,
@@ -86,7 +92,7 @@ export async function loadAgentUiConfig(
     throw new Error(`Config file not found: ${configPath}`);
   }
 
-  const raw = await readJson<unknown>(configPath);
+  const raw = await readJson(configPath);
   const parsed = AgentUiConfigSchema.safeParse(raw);
 
   if (!parsed.success) {

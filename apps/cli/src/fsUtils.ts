@@ -43,7 +43,7 @@ export async function readText(path: string): Promise<string> {
   }
 }
 
-export async function readJson<T>(path: string): Promise<T> {
+export async function readJson<T = unknown>(path: string) {
   const text = await readText(path);
 
   try {
