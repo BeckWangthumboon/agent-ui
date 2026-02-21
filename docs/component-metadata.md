@@ -1,115 +1,160 @@
-# Component Metadata Annotation Guide (Schema v2)
+# Component Metadata Guide
 
-This guide defines how to annotate component metadata via `data/components.csv` and keep generated component documents consistent.
+This project currently uses two related shapes:
 
-`data/components/*/meta.json` (plus component code files) is the canonical source of truth. `data/components.csv` is a temporary editing/import surface for easier bulk annotation and user edits.
+- Local annotation/source shape: `data/components/<id>/meta.json` (`schemaVersion: 2`)
+- Backend/storage shape: three split Convex tables (`schemaVersion: 4`)
 
-After CSV edits, run `bun run import:csv` to synchronize `data/components/*/meta.json` to schema v2.
+`data/components.csv` is a bulk editing surface that imports into local `meta.json` files.
 
-## Source of truth policy
+## Current data flow
 
-- Treat JSON component documents under `data/components/<id>/meta.json` as canonical.
-- Treat `data/components.csv` as a convenience layer for bulk edits and annotation.
-- Consider CSV work incomplete until import and validation both pass.
+1. Edit `data/components.csv`.
+2. Run `bun run data:import-csv` (alias: `bun run import:csv`) to write `data/components/<id>/meta.json`.
+3. Backend upsert (`apps/backend/convex/admin.ts`) accepts the v2 document and splits it into:
+   - `components` (metadata)
+   - `componentCode` (code files)
+   - `componentSearch` (search text fields)
+4. Optional live Convex integrity check:
+   - `bun run --cwd apps/backend validate:data`
+5. Optional reverse sync from Convex back to local `data/components/`:
+   - `bun run --cwd apps/backend sync:data`
 
-## Workflow
+## Source of truth
 
-1. Edit rows in `data/components.csv`.
-2. Ensure each row's `code_file` exists at `data/components/<id>/<code_file>`.
-3. Run `bun run import:csv`.
-4. Run `bun run validate` (or `bun run cli validate` if no `validate` script exists).
+- For local editing/import: `data/components/<id>/meta.json` is canonical.
+- For live backend behavior: Convex tables (`components`, `componentCode`, `componentSearch`) are canonical.
 
-## CSV column contract
+## CSV contract (import-from-csv)
 
-- `id` (required): stable unique id. Use lowercase kebab-case and keep existing ids stable.
-- `name` (required): human-readable component name.
-- `framework` (required): currently `react` only.
-- `styling` (required): currently `tailwind` only.
-- `intent` (required): one short sentence describing the user problem solved.
-- `capabilities` (required header, value may be empty): pipe-delimited list of verb phrases.
-- `synonyms` (required header, value may be empty): pipe-delimited list of likely search phrases.
-- `topics` (required header, value may be empty): pipe-delimited list from the controlled vocabulary below.
-- `dependencies` (required header, value may be empty): pipe-delimited npm package names. Imported as runtime dependencies.
-- `motion` (required): one of `none | minimal | standard | heavy`.
-- `source_url` (required): canonical public URL for the component docs/source.
-- `source_library` (recommended): library name (for example `shadcn`, `magicui`).
-- `source_repo` (required header, value may be empty): repository slug such as `owner/repo`.
-- `source_author` (required header, value may be empty): author or maintainer.
-- `source_license` (required header, value may be empty): license identifier (for example `MIT`).
-- `code_file` (required): entry file name for this component (for example `dialog.tsx`).
+Required headers:
 
-## How CSV maps to schema v2
-
-- `motion` in CSV maps to `motionLevel` in `meta.json`.
-- `capabilities`, `synonyms`, `topics`, and `dependencies` are split on `|`, trimmed, and deduplicated case-insensitively.
-- `dependencies` become objects in `meta.json` with `kind: "runtime"`.
-- `code_file` maps to `code.entryFile`; importer loads file content from `data/components/<id>/<code_file>` into `code.files`.
-
-## Annotation guidance (semantic fields)
-
+- `id`
+- `name`
+- `framework`
+- `styling`
 - `intent`
-  - Write one sentence in product language.
-  - Focus on user goal, not implementation.
-  - Good: `Asks for explicit confirmation before destructive actions.`
-
 - `capabilities`
-  - Use 3-6 short verb phrases.
-  - Start with action verbs (`open`, `filter`, `select`, `display`, `animate`).
-  - Avoid repeating the same idea with minor wording changes.
-
 - `synonyms`
-  - Use 4-8 realistic search phrases users would type.
-  - Include common variants and aliases (`tree view`, `directory tree`).
-  - Keep phrases short; avoid full sentences.
-
 - `topics`
-  - Use 2-5 controlled facets from the vocabulary below.
-  - Pick the smallest set that best captures retrieval intent.
-  - Do not include library/vendor names (`radix`, `shadcn`, `magicui`).
-  - Do not use `accessibility` as a topic; accessibility is baseline quality.
-
+- `dependencies`
 - `motion`
-  - Use the rubric below consistently.
+- `source_url`
+- `source_repo`
+- `source_author`
+- `source_license`
+- `code_file`
 
-## Motion rubric
+Optional header:
 
-- `none`: no intentional animation or transition users notice.
-- `minimal`: subtle polish only (hover/focus/opacity/position).
-- `standard`: clear state/enter/exit animation users notice.
-- `heavy`: motion is a primary part of the UX (prominent or choreographed animation).
+- `source_library`
 
-## Controlled topics vocabulary (current)
+Allowed values enforced by importer:
 
-- action
-- selection
-- toggle
-- confirmation
-- destructive
-- disclosure
-- input
-- form
-- validation
-- authentication
-- date-time
-- navigation
-- menu
-- command-palette
-- breadcrumb
-- pagination
-- overlay
-- modal
-- popover
-- drawer
-- tooltip
-- feedback
-- status
-- notification
-- loading
-- progress
-- empty-state
-- data-display
-- data-visualization
-- layout
-- scrolling
-- resizable
-- keyboard
+- `motion`: `none | minimal | standard | heavy`
+
+Notes:
+
+- `capabilities`, `synonyms`, `topics`, `dependencies` are `|`-delimited, trimmed, and deduplicated case-insensitively.
+- `dependencies` become objects with `kind: "runtime"` in v2 `meta.json`.
+- `code_file` must exist at `data/components/<id>/<code_file>` and must be non-empty.
+- Import currently writes a single code file entry in `code.files` (from `code_file`).
+
+## v2 local document fields (`meta.json`)
+
+`schemaVersion: 2` documents include:
+
+- `id`
+- `name`
+- `source`:
+  - `url` (required)
+  - `library`, `repo`, `author`, `license` (optional)
+- `framework`
+- `styling`
+- `dependencies` (`[{ name, kind }]`)
+- `intent`
+- `capabilities`
+- `synonyms`
+- `topics`
+- `motionLevel`
+- `primitiveLibrary` (optional)
+- `animationLibrary` (optional)
+- `constraints` (optional)
+- `code`:
+  - `entryFile`
+  - `files[]` (`{ path, content }`)
+
+## v4 backend split records (derived on upsert)
+
+When a v2 document is upserted, backend derives:
+
+- `components` (`schemaVersion: 4`):
+  - `id`, `name`, `source`, `framework`, `styling`, `dependencies`, `motionLevel`, `primitiveLibrary`, `animationLibrary`, `constraints`
+- `componentCode` (`schemaVersion: 4`):
+  - `componentId`, `entryFile`, `files`
+- `componentSearch` (`schemaVersion: 4`):
+  - `componentId`, `intent`, `capabilities`, `synonyms`, `topics`
+
+### Important: ID behavior
+
+- CSV/local `meta.json` `id` is an input identifier.
+- Backend generates a public component id via `buildPublicComponentId(...)` and stores that in v4 tables.
+- Generated id is based on name/library slug plus a hash fingerprint of:
+  - local `id`
+  - `source.url`
+  - `framework`
+  - `styling`
+
+## Derived library fields
+
+If v2 `primitiveLibrary` / `animationLibrary` are missing, backend derives them from dependencies:
+
+- `primitiveLibrary`
+  - `radix` if dependency starts with `@radix-ui/`
+  - `base-ui` if dependency starts with `@base-ui/` or contains `base-ui`
+  - `other` if dependency matches headless/ariakit patterns
+  - otherwise `none`
+- `animationLibrary`
+  - `motion` for `motion` / `motion/react` patterns
+  - `framer-motion` for framer-motion patterns
+  - otherwise `none`
+
+## Controlled vocabularies
+
+- `framework`: `react`
+- `styling`: `tailwind`
+- `motion`: `none | minimal | standard | heavy`
+- `topics`:
+  - action
+  - selection
+  - toggle
+  - confirmation
+  - destructive
+  - disclosure
+  - input
+  - form
+  - validation
+  - authentication
+  - date-time
+  - navigation
+  - menu
+  - command-palette
+  - breadcrumb
+  - pagination
+  - overlay
+  - modal
+  - popover
+  - drawer
+  - tooltip
+  - feedback
+  - status
+  - notification
+  - loading
+  - progress
+  - empty-state
+  - data-display
+  - data-visualization
+  - layout
+  - scrolling
+  - resizable
+  - keyboard
