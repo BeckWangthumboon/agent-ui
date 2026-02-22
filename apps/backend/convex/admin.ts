@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 import { buildSplitComponentRecords } from "../../../shared/component-schema";
-import { ComponentDocumentValidator } from "./validators";
+import { ComponentCodeFileValidator, ComponentDocumentValidator, ComponentInstallValidator } from "./validators";
 
 type ComponentSearchRecord = Doc<"componentSearch">;
 type ComponentFileRecord = Doc<"componentFiles">;
@@ -30,6 +30,22 @@ async function findFilesByComponentId(
   return ctx.db
     .query("componentFiles")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .collect();
+}
+
+async function findMetadataByComponentId(ctx: MutationCtx, componentId: string) {
+  return ctx.db
+    .query("components")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", componentId))
+    .unique();
+}
+
+async function findExampleFilesByComponentId(ctx: MutationCtx, componentId: string) {
+  return ctx.db
+    .query("componentFiles")
+    .withIndex("by_component_kind", (indexQuery) =>
+      indexQuery.eq("componentId", componentId).eq("kind", "example"),
+    )
     .collect();
 }
 
@@ -65,6 +81,89 @@ export const exportTablePage = query({
       numItems: pageSize,
       cursor: args.cursor ?? null,
     });
+  },
+});
+
+export const patchInstallExample = mutation({
+  args: {
+    componentId: v.string(),
+    install: v.optional(ComponentInstallValidator),
+    clearInstall: v.optional(v.boolean()),
+    example: v.optional(ComponentCodeFileValidator),
+    clearExample: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const metadata = await findMetadataByComponentId(ctx, args.componentId);
+    if (!metadata) {
+      throw new Error(`Component not found: ${args.componentId}`);
+    }
+
+    const shouldSetInstall = args.install !== undefined;
+    const shouldClearInstall = args.clearInstall === true;
+
+    if (shouldSetInstall && shouldClearInstall) {
+      throw new Error("Pass either install or clearInstall, not both");
+    }
+
+    if (shouldSetInstall || shouldClearInstall) {
+      const { _id: _metadataId, _creationTime: _metadataCreationTime, ...metadataFields } = metadata;
+      void _metadataId;
+      void _metadataCreationTime;
+
+      const nextMetadata = {
+        ...metadataFields,
+        ...(shouldSetInstall ? { install: args.install } : {}),
+      };
+
+      if (shouldClearInstall) {
+        delete nextMetadata.install;
+      }
+
+      await ctx.db.replace(metadata._id, nextMetadata);
+    }
+
+    const shouldSetExample = args.example !== undefined;
+    const shouldClearExample = args.clearExample === true;
+
+    if (shouldSetExample && shouldClearExample) {
+      throw new Error("Pass either example or clearExample, not both");
+    }
+
+    if (shouldSetExample || shouldClearExample) {
+      const existingExamples = await findExampleFilesByComponentId(ctx, args.componentId);
+
+      if (shouldSetExample && args.example) {
+        const nextExample = {
+          schemaVersion: 5 as const,
+          componentId: args.componentId,
+          kind: "example" as const,
+          path: args.example.path,
+          content: args.example.content,
+        };
+
+        if (existingExamples.length > 0) {
+          await ctx.db.replace(existingExamples[0]!._id, nextExample);
+          for (const duplicate of existingExamples.slice(1)) {
+            await ctx.db.delete(duplicate._id);
+          }
+        } else {
+          await ctx.db.insert("componentFiles", nextExample);
+        }
+      }
+
+      if (shouldClearExample) {
+        for (const row of existingExamples) {
+          await ctx.db.delete(row._id);
+        }
+      }
+    }
+
+    return {
+      status: "patched",
+      componentId: args.componentId,
+      installUpdated: shouldSetInstall || shouldClearInstall,
+      exampleUpdated: shouldSetExample || shouldClearExample,
+    };
   },
 });
 
