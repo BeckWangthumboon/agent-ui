@@ -39,7 +39,7 @@ type SearchCandidate = Pick<
   | "animationLibrary"
 >;
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 5;
 
 const FUSE_OPTIONS: IFuseOptions<SearchCandidate> = {
   includeScore: true,
@@ -77,14 +77,8 @@ export async function runSearchCommand(
     query: normalizedQuery,
     filters,
   });
-  const filteredCandidates = candidates.filter((candidate) =>
-    matchesLocalFilters(candidate, {
-      motion: motionFilters,
-      primitiveLibrary: primitiveLibraryFilters,
-    }),
-  );
   const limit = normalizeLimit(options.limit);
-  const rankedResults = rankResults(filteredCandidates, normalizedQuery, limit);
+  const rankedResults = rankResults(candidates, normalizedQuery, limit);
   const hydratedResults = await hydrateResults(rankedResults, client);
 
   if (options.json) {
@@ -98,7 +92,7 @@ export async function runSearchCommand(
             motion: motionFilters,
             primitiveLibrary: primitiveLibraryFilters,
           },
-          candidateCount: filteredCandidates.length,
+          candidateCount: candidates.length,
           resultCount: hydratedResults.length,
           results: hydratedResults,
         },
@@ -199,11 +193,6 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.floor(limit);
 }
 
-type LocalFilterOptions = {
-  motion?: ComponentMotion[];
-  primitiveLibrary?: ComponentPrimitiveLibrary[];
-};
-
 function normalizeFilterValues<TValue extends string>(
   values: TValue[] | undefined,
 ): TValue[] | undefined {
@@ -222,14 +211,13 @@ function buildBackendFilters(
   const candidateFilters: {
     framework?: ComponentFramework;
     styling?: ComponentStyling;
-    motion?: ComponentMotion;
-    primitiveLibrary?: ComponentPrimitiveLibrary;
+    motion?: ComponentMotion[];
+    primitiveLibrary?: ComponentPrimitiveLibrary[];
   } = {
     framework: options.framework,
     styling: options.styling,
-    motion: motionFilters?.length === 1 ? motionFilters[0] : undefined,
-    primitiveLibrary:
-      primitiveLibraryFilters?.length === 1 ? primitiveLibraryFilters[0] : undefined,
+    motion: motionFilters,
+    primitiveLibrary: primitiveLibraryFilters,
   };
 
   if (
@@ -242,19 +230,6 @@ function buildBackendFilters(
   }
 
   return candidateFilters;
-}
-
-function matchesLocalFilters(candidate: SearchCandidate, filters: LocalFilterOptions): boolean {
-  if (filters.motion && !filters.motion.includes(candidate.motionLevel)) {
-    return false;
-  }
-
-  const primitiveLibrary = candidate.primitiveLibrary ?? "none";
-  if (filters.primitiveLibrary && !filters.primitiveLibrary.includes(primitiveLibrary)) {
-    return false;
-  }
-
-  return true;
 }
 
 export function parsePositiveInteger(value: string): number {

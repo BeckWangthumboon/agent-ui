@@ -70,6 +70,32 @@ describe("runSearchCommand", () => {
     expect(payload.results[0].id).toBe("core-button");
   });
 
+  it("uses default limit of 5 when limit is not provided", async () => {
+    const candidates = Array.from({ length: 6 }, (_, index) => ({
+      ...createSampleSearchCandidate(),
+      id: `core-button-${index + 1}`,
+      name: `Button ${index + 1}`,
+      intent: `Button intent ${index + 1}`,
+    }));
+    const metadata = candidates.map((candidate) => ({
+      ...createSampleComponentMetadata(),
+      id: candidate.id,
+      name: candidate.name,
+    }));
+    let callIndex = 0;
+    const { client, calls } = createMockClient(async () => {
+      callIndex += 1;
+      return callIndex === 1 ? candidates : metadata;
+    });
+
+    await captureCommandOutput(async () => {
+      await runSearchCommand("button", {}, client);
+    });
+
+    expect(calls).toHaveLength(2);
+    expect((calls[1]?.args as { ids?: string[] })?.ids).toHaveLength(5);
+  });
+
   it("supports list filters for motion and primitive library", async () => {
     const first = {
       ...createSampleSearchCandidate(),
@@ -118,12 +144,15 @@ describe("runSearchCommand", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]?.args).toEqual({
       query: "button",
-      filters: undefined,
+      filters: {
+        motion: ["none", "minimal"],
+        primitiveLibrary: ["radix", "base-ui"],
+      },
     });
 
     const payload = JSON.parse(output.logs[0] ?? "{}");
-    expect(payload.candidateCount).toBe(1);
-    expect(payload.resultCount).toBe(1);
+    expect(payload.candidateCount).toBe(2);
+    expect(payload.resultCount).toBe(2);
     expect(payload.results[0].id).toBe("core-button");
     expect(payload.filters.motion).toEqual(["none", "minimal"]);
     expect(payload.filters.primitiveLibrary).toEqual(["radix", "base-ui"]);

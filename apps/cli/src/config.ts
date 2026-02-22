@@ -35,7 +35,7 @@ export type AgentUiConfig = z.infer<typeof AgentUiConfigSchema>;
 export const DEFAULT_AGENT_UI_CONFIG: AgentUiConfig = {
   schemaVersion: 1,
   search: {
-    limit: 10,
+    limit: 5,
     framework: "react",
     styling: "tailwind",
     motion: ["none", "minimal"],

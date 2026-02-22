@@ -55,10 +55,28 @@ type ViewComponent = {
 type ComponentFilters = {
   framework?: ComponentRecord["framework"];
   styling?: ComponentRecord["styling"];
-  motion?: ComponentRecord["motionLevel"];
-  primitiveLibrary?: ComponentRecord["primitiveLibrary"];
+  motion?: ComponentRecord["motionLevel"][];
+  primitiveLibrary?: ComponentRecord["primitiveLibrary"][];
   animationLibrary?: ComponentRecord["animationLibrary"];
 };
+
+type SeedQuery =
+  | {
+      kind: "primitiveLibraryAndMotion";
+      primitiveLibrary: ComponentRecord["primitiveLibrary"];
+      motionLevel: ComponentRecord["motionLevel"];
+    }
+  | {
+      kind: "animationLibraryAndMotion";
+      animationLibrary: ComponentRecord["animationLibrary"];
+      motionLevel: ComponentRecord["motionLevel"];
+    }
+  | { kind: "framework"; value: ComponentRecord["framework"] }
+  | { kind: "styling"; value: ComponentRecord["styling"] }
+  | { kind: "motion"; value: ComponentRecord["motionLevel"] }
+  | { kind: "primitiveLibrary"; value: ComponentRecord["primitiveLibrary"] }
+  | { kind: "animationLibrary"; value: ComponentRecord["animationLibrary"] }
+  | { kind: "all" };
 
 function toFallbackIntent(componentName: string): string {
   const trimmedName = componentName.trim();
@@ -84,30 +102,6 @@ function toSearchCandidate(
   };
 }
 
-function matchesFilters(component: ComponentRecord, filters: ComponentFilters): boolean {
-  if (filters.framework && component.framework !== filters.framework) {
-    return false;
-  }
-
-  if (filters.styling && component.styling !== filters.styling) {
-    return false;
-  }
-
-  if (filters.motion && component.motionLevel !== filters.motion) {
-    return false;
-  }
-
-  if (filters.primitiveLibrary && component.primitiveLibrary !== filters.primitiveLibrary) {
-    return false;
-  }
-
-  if (filters.animationLibrary && component.animationLibrary !== filters.animationLibrary) {
-    return false;
-  }
-
-  return true;
-}
-
 async function findComponentById(ctx: QueryCtx, id: string): Promise<ComponentRecord | null> {
   const exact = await ctx.db
     .query("components")
@@ -126,55 +120,150 @@ async function findComponentById(ctx: QueryCtx, id: string): Promise<ComponentRe
   return insensitiveMatch ?? null;
 }
 
+function getSingleValueFilter<TValue>(values: TValue[] | undefined): TValue | undefined {
+  if (!values || values.length !== 1) {
+    return undefined;
+  }
+
+  return values[0];
+}
+
+function selectSeedQuery(filters: ComponentFilters): SeedQuery {
+  const motion = getSingleValueFilter(filters.motion);
+  const primitiveLibrary = getSingleValueFilter(filters.primitiveLibrary);
+  if (primitiveLibrary !== undefined && motion !== undefined) {
+    return {
+      kind: "primitiveLibraryAndMotion",
+      primitiveLibrary,
+      motionLevel: motion,
+    };
+  }
+
+  if (filters.animationLibrary !== undefined && motion !== undefined) {
+    return {
+      kind: "animationLibraryAndMotion",
+      animationLibrary: filters.animationLibrary,
+      motionLevel: motion,
+    };
+  }
+
+  if (primitiveLibrary !== undefined) {
+    return { kind: "primitiveLibrary", value: primitiveLibrary };
+  }
+
+  if (filters.animationLibrary !== undefined) {
+    return { kind: "animationLibrary", value: filters.animationLibrary };
+  }
+
+  if (motion !== undefined) {
+    return { kind: "motion", value: motion };
+  }
+
+  if (filters.framework !== undefined) {
+    return { kind: "framework", value: filters.framework };
+  }
+
+  if (filters.styling !== undefined) {
+    return { kind: "styling", value: filters.styling };
+  }
+
+  return { kind: "all" };
+}
+
+async function executeSeedQuery(ctx: QueryCtx, seedQuery: SeedQuery): Promise<ComponentRecord[]> {
+  switch (seedQuery.kind) {
+    case "primitiveLibraryAndMotion":
+      return ctx.db
+        .query("components")
+        .withIndex("by_primitive_motion", (indexQuery) =>
+          indexQuery
+            .eq("primitiveLibrary", seedQuery.primitiveLibrary)
+            .eq("motionLevel", seedQuery.motionLevel),
+        )
+        .collect();
+    case "animationLibraryAndMotion":
+      return ctx.db
+        .query("components")
+        .withIndex("by_animation_motion", (indexQuery) =>
+          indexQuery
+            .eq("animationLibrary", seedQuery.animationLibrary)
+            .eq("motionLevel", seedQuery.motionLevel),
+        )
+        .collect();
+    case "framework":
+      return ctx.db
+        .query("components")
+        .withIndex("by_framework", (indexQuery) => indexQuery.eq("framework", seedQuery.value))
+        .collect();
+    case "styling":
+      return ctx.db
+        .query("components")
+        .withIndex("by_styling", (indexQuery) => indexQuery.eq("styling", seedQuery.value))
+        .collect();
+    case "motion":
+      return ctx.db
+        .query("components")
+        .withIndex("by_motion_level", (indexQuery) => indexQuery.eq("motionLevel", seedQuery.value))
+        .collect();
+    case "primitiveLibrary":
+      return ctx.db
+        .query("components")
+        .withIndex("by_primitive_library", (indexQuery) =>
+          indexQuery.eq("primitiveLibrary", seedQuery.value),
+        )
+        .collect();
+    case "animationLibrary":
+      return ctx.db
+        .query("components")
+        .withIndex("by_animation_library", (indexQuery) =>
+          indexQuery.eq("animationLibrary", seedQuery.value),
+        )
+        .collect();
+    case "all":
+      return ctx.db.query("components").collect();
+  }
+}
+
+function matchesListFilter<TValue>(value: TValue, filterValues: TValue[] | undefined): boolean {
+  if (!filterValues || filterValues.length === 0) {
+    return true;
+  }
+
+  return filterValues.includes(value);
+}
+
+function matchesAllFilters(component: ComponentRecord, filters: ComponentFilters): boolean {
+  if (filters.framework && component.framework !== filters.framework) {
+    return false;
+  }
+
+  if (filters.styling && component.styling !== filters.styling) {
+    return false;
+  }
+
+  if (!matchesListFilter(component.motionLevel, filters.motion)) {
+    return false;
+  }
+
+  if (!matchesListFilter(component.primitiveLibrary, filters.primitiveLibrary)) {
+    return false;
+  }
+
+  if (filters.animationLibrary && component.animationLibrary !== filters.animationLibrary) {
+    return false;
+  }
+
+  return true;
+}
+
 async function queryComponentsByFilters(
   ctx: QueryCtx,
   filters: ComponentFilters,
 ): Promise<ComponentRecord[]> {
-  const frameworkFilter = filters.framework;
-  if (frameworkFilter !== undefined) {
-    return ctx.db
-      .query("components")
-      .withIndex("by_framework", (indexQuery) => indexQuery.eq("framework", frameworkFilter))
-      .collect();
-  }
+  const seedQuery = selectSeedQuery(filters);
+  const candidates = await executeSeedQuery(ctx, seedQuery);
 
-  const stylingFilter = filters.styling;
-  if (stylingFilter !== undefined) {
-    return ctx.db
-      .query("components")
-      .withIndex("by_styling", (indexQuery) => indexQuery.eq("styling", stylingFilter))
-      .collect();
-  }
-
-  const motionFilter = filters.motion;
-  if (motionFilter !== undefined) {
-    return ctx.db
-      .query("components")
-      .withIndex("by_motion_level", (indexQuery) => indexQuery.eq("motionLevel", motionFilter))
-      .collect();
-  }
-
-  const primitiveLibraryFilter = filters.primitiveLibrary;
-  if (primitiveLibraryFilter !== undefined) {
-    return ctx.db
-      .query("components")
-      .withIndex("by_primitive_library", (indexQuery) =>
-        indexQuery.eq("primitiveLibrary", primitiveLibraryFilter),
-      )
-      .collect();
-  }
-
-  const animationLibraryFilter = filters.animationLibrary;
-  if (animationLibraryFilter !== undefined) {
-    return ctx.db
-      .query("components")
-      .withIndex("by_animation_library", (indexQuery) =>
-        indexQuery.eq("animationLibrary", animationLibraryFilter),
-      )
-      .collect();
-  }
-
-  return ctx.db.query("components").collect();
+  return candidates.filter((component) => matchesAllFilters(component, filters));
 }
 
 async function toViewComponent(
@@ -232,8 +321,8 @@ export const componentsQuery = query({
       v.object({
         framework: v.optional(ComponentFrameworkValidator),
         styling: v.optional(ComponentStylingValidator),
-        motion: v.optional(ComponentMotionValidator),
-        primitiveLibrary: v.optional(ComponentPrimitiveLibraryValidator),
+        motion: v.optional(v.array(ComponentMotionValidator)),
+        primitiveLibrary: v.optional(v.array(ComponentPrimitiveLibraryValidator)),
         animationLibrary: v.optional(ComponentAnimationLibraryValidator),
       }),
     ),
@@ -252,9 +341,9 @@ export const componentsQuery = query({
       searchRecords.map((searchRecord) => [searchRecord.componentId, searchRecord]),
     );
 
-    return componentsFromIndex
-      .filter((component) => matchesFilters(component, filters))
-      .map((component) => toSearchCandidate(component, searchByComponentId.get(component.id)));
+    return componentsFromIndex.map((component) =>
+      toSearchCandidate(component, searchByComponentId.get(component.id)),
+    );
   },
 });
 

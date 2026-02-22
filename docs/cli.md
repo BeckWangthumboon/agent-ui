@@ -44,7 +44,7 @@ Behavior:
 - Loads config defaults and merges them with CLI flags.
 - Creates a Convex client from `CONVEX_URL`.
 - Queries `api.search.componentsQuery`.
-- Applies local multi-value filtering for `motion` and `primitiveLibrary`.
+- Sends all filters (including multi-value `motion` and `primitiveLibrary`) to the backend query.
 - Ranks candidates with Fuse.js.
 - Hydrates metadata via `api.components.getMetadataByIds`.
 - Prints table-like text output or structured JSON.
@@ -106,7 +106,7 @@ Default config payload written on first `search` run when missing:
 {
   "schemaVersion": 1,
   "search": {
-    "limit": 10,
+    "limit": 5,
     "framework": "react",
     "styling": "tailwind",
     "motion": ["none", "minimal"],
