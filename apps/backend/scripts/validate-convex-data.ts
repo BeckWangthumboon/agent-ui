@@ -3,15 +3,17 @@ import { makeFunctionReference } from "convex/server";
 import type { ZodType } from "zod";
 
 import {
+  ComponentFileDocumentSchema,
   ComponentCodeDocumentSchema,
   ComponentMetadataDocumentSchema,
   ComponentSearchDocumentSchema,
+  type ComponentFileDocument,
   type ComponentCodeDocument,
   type ComponentMetadataDocument,
   type ComponentSearchDocument,
 } from "../../../shared/component-schema";
 
-type SnapshotTable = "components" | "componentCode" | "componentSearch";
+type SnapshotTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
 
 type PaginationResult<TDocument> = {
   page: TDocument[];
@@ -48,6 +50,7 @@ async function main(): Promise<void> {
 
   const rawMetadata = await fetchAllDocuments(client, "components");
   const rawCode = await fetchAllDocuments(client, "componentCode");
+  const rawFiles = await fetchAllDocuments(client, "componentFiles");
   const rawSearch = await fetchAllDocuments(client, "componentSearch");
 
   const issues: ValidationIssue[] = [];
@@ -66,6 +69,13 @@ async function main(): Promise<void> {
     "componentId",
     issues,
   );
+  const fileRows = validateFileRows(
+    rawFiles,
+    "componentFiles",
+    ComponentFileDocumentSchema,
+    "componentId",
+    issues,
+  );
   const search = validateRows(
     rawSearch,
     "componentSearch",
@@ -74,7 +84,7 @@ async function main(): Promise<void> {
     issues,
   );
 
-  validateCrossTableIntegrity(metadata, code, search, issues);
+  validateCrossTableIntegrity(metadata, code, fileRows, search, issues);
 
   const warningCount = issues.filter((issue) => issue.level === "warning").length;
   const errorCount = issues.filter((issue) => issue.level === "error").length;
@@ -87,11 +97,13 @@ async function main(): Promise<void> {
     counts: {
       components: rawMetadata.length,
       componentCode: rawCode.length,
+      componentFiles: rawFiles.length,
       componentSearch: rawSearch.length,
     },
     validRows: {
       components: metadata.length,
       componentCode: code.length,
+      componentFiles: fileRows.length,
       componentSearch: search.length,
     },
     warningCount,
@@ -104,10 +116,10 @@ async function main(): Promise<void> {
   } else {
     console.log(`Validated Convex deployment: ${convexUrl}`);
     console.log(
-      `Rows: components=${summary.counts.components}, componentCode=${summary.counts.componentCode}, componentSearch=${summary.counts.componentSearch}`,
+      `Rows: components=${summary.counts.components}, componentCode=${summary.counts.componentCode}, componentFiles=${summary.counts.componentFiles}, componentSearch=${summary.counts.componentSearch}`,
     );
     console.log(
-      `Valid rows: components=${summary.validRows.components}, componentCode=${summary.validRows.componentCode}, componentSearch=${summary.validRows.componentSearch}`,
+      `Valid rows: components=${summary.validRows.components}, componentCode=${summary.validRows.componentCode}, componentFiles=${summary.validRows.componentFiles}, componentSearch=${summary.validRows.componentSearch}`,
     );
     console.log(`Warnings: ${warningCount}`);
     console.log(`Errors: ${errorCount}`);
@@ -196,15 +208,58 @@ function validateRows<
   return validRows;
 }
 
+function validateFileRows(
+  rows: unknown[],
+  table: SnapshotTable,
+  schema: ZodType<ComponentFileDocument>,
+  idField: "componentId",
+  issues: ValidationIssue[],
+): ComponentFileDocument[] {
+  const validRows: ComponentFileDocument[] = [];
+
+  for (const row of rows) {
+    const normalized = stripConvexSystemFields(row);
+    const parsed = schema.safeParse(normalized);
+    const candidateId = readStringField(normalized, idField);
+
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        issues.push({
+          level: "error",
+          table,
+          componentId: candidateId,
+          message: formatZodIssue(issue.path, issue.message),
+        });
+      }
+      continue;
+    }
+
+    validRows.push(parsed.data);
+  }
+
+  return validRows;
+}
+
 function validateCrossTableIntegrity(
   metadataRows: ComponentMetadataDocument[],
   codeRows: ComponentCodeDocument[],
+  fileRows: ComponentFileDocument[],
   searchRows: ComponentSearchDocument[],
   issues: ValidationIssue[],
 ): void {
   const metadataIds = new Set(metadataRows.map((row) => row.id));
   const codeByComponentId = new Map(codeRows.map((row) => [row.componentId, row]));
   const searchByComponentId = new Map(searchRows.map((row) => [row.componentId, row]));
+  const filesByComponentId = new Map<string, ComponentFileDocument[]>();
+
+  for (const fileRow of fileRows) {
+    const files = filesByComponentId.get(fileRow.componentId);
+    if (files) {
+      files.push(fileRow);
+    } else {
+      filesByComponentId.set(fileRow.componentId, [fileRow]);
+    }
+  }
 
   for (const metadataId of metadataIds) {
     if (!codeByComponentId.has(metadataId)) {
@@ -237,27 +292,57 @@ function validateCrossTableIntegrity(
       continue;
     }
 
-    const filePaths = new Set<string>();
+    const fileRowsForComponent = filesByComponentId.get(codeRow.componentId) ?? [];
+    const codeFileRows = fileRowsForComponent.filter((row) => row.kind === "code");
+    const availableFilePaths = new Set(codeFileRows.map((row) => row.path));
 
-    for (const file of codeRow.files) {
-      if (filePaths.has(file.path)) {
-        issues.push({
-          level: "error",
-          table: "componentCode",
-          componentId: codeRow.componentId,
-          message: `Duplicate code.files.path value: ${file.path}`,
-        });
-      }
-
-      filePaths.add(file.path);
-    }
-
-    if (!filePaths.has(codeRow.entryFile)) {
+    if (!availableFilePaths.has(codeRow.entryFile)) {
       issues.push({
         level: "error",
         table: "componentCode",
         componentId: codeRow.componentId,
-        message: "entryFile must reference one of code.files[].path",
+        message: "entryFile must reference one code file path",
+      });
+    }
+  }
+
+  for (const [componentId, files] of filesByComponentId.entries()) {
+    const seenPaths = new Set<string>();
+    let exampleCount = 0;
+
+    for (const file of files) {
+      if (seenPaths.has(file.path)) {
+        issues.push({
+          level: "error",
+          table: "componentFiles",
+          componentId,
+          message: `Duplicate componentFiles.path value: ${file.path}`,
+        });
+      }
+      seenPaths.add(file.path);
+
+      if (file.kind === "example") {
+        exampleCount += 1;
+      }
+    }
+
+    if (exampleCount > 1) {
+      issues.push({
+        level: "warning",
+        table: "componentFiles",
+        componentId,
+        message: "Multiple example files found; only one canonical example is expected",
+      });
+    }
+  }
+
+  for (const fileRow of fileRows) {
+    if (!metadataIds.has(fileRow.componentId)) {
+      issues.push({
+        level: "error",
+        table: "componentFiles",
+        componentId: fileRow.componentId,
+        message: "Orphan row: no matching components.id",
       });
     }
   }

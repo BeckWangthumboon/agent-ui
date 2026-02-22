@@ -68,6 +68,7 @@ Options:
 
 - `--verbose`
 - `--code`
+- `--example`
 - `--json`
 
 Behavior:
@@ -76,7 +77,8 @@ Behavior:
 - Creates a Convex client from `CONVEX_URL`.
 - Queries `api.search.getById`.
 - `--code` or `--json` requests code payload (`includeCode: true`).
-- Prints summary output, verbose metadata, full code blocks, or raw JSON.
+- `--example` requests a canonical usage example payload (`includeExample: true`).
+- Prints summary output, verbose metadata, full code blocks, canonical example blocks, or raw JSON.
 
 Failure cases:
 

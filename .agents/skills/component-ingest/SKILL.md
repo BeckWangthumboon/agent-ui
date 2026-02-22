@@ -11,8 +11,9 @@ Populate and maintain `data/components.csv` from a user-specified source while k
 
 1. Read `docs/component-metadata.md` before any edit.
 2. Treat it as authoritative for CSV contract, semantic fields, motion rubric, and controlled topics intent.
-3. Also read `src/types.ts` and treat `ComponentTopicSchema` as the runtime-enforced controlled vocabulary.
-4. If docs and runtime schema disagree, prefer runtime safety and report the mismatch.
+3. Also read `shared/component-schema/constants.ts` and treat `COMPONENT_TOPICS` as the runtime-enforced controlled vocabulary.
+4. When validating table-shape assumptions, read `shared/component-schema/types.ts` (especially split storage types for `componentCode` and `componentFiles`).
+5. If docs and runtime schema disagree, prefer runtime safety and report the mismatch.
 
 ## Source of Truth Policy
 
@@ -20,6 +21,7 @@ Populate and maintain `data/components.csv` from a user-specified source while k
 - Treat `data/components.csv` as a temporary editing/import surface used for easier bulk annotation and user edits.
 - After CSV edits, always run import so JSON documents are synchronized to the latest intended state.
 - Do not treat CSV-only changes as complete until import and validation succeed.
+- For live backend behavior, remember upsert splits data into `components`, `componentCode` (manifest), `componentFiles` (one row per `code`/`example` file), and `componentSearch`.
 
 ## Workflow
 
@@ -54,6 +56,7 @@ Populate and maintain `data/components.csv` from a user-specified source while k
 - Prefer deterministic naming: `code_file = <id>.tsx` and path `data/components/<id>/<id>.tsx`.
 - Ensure the chosen `code_file` naming aligns with importer directory resolution logic used in this repo.
 - Avoid collisions with existing component directories or entry filenames.
+- Usage examples are optional and not part of the CSV contract; if needed, represent them in `meta.json` as `example: { path, content }`.
 
 ## Annotation Rules
 
@@ -71,20 +74,16 @@ Populate and maintain `data/components.csv` from a user-specified source while k
 - Add a new topic term only when existing terms cannot represent retrieval intent without distortion.
 - When adding a new term:
   1. Update controlled vocabulary list in `docs/component-metadata.md`.
-  2. Update runtime enum in `src/types.ts` (`ComponentTopicSchema`).
+  2. Update runtime enum in `shared/component-schema/constants.ts` (`COMPONENT_TOPICS`).
   3. Re-run import + validation.
 - Always report each new term and rationale.
 
 ## Import and Validation Commands
 
-Use this command resolution order:
+Use this command flow:
 
 1. `bun run import:csv`
-2. Validation:
-   - Prefer `bun run validate` if script exists.
-   - Else run `bun run cli validate`.
-   - Else run `bun run src/cli.ts validate`.
-   - If no validation path exists, report as unresolved with exact command errors.
+2. `bun run --cwd apps/backend validate:data`
 
 If validation fails, fix issues and re-run until clean when possible.
 
@@ -108,7 +107,7 @@ Always include:
 - Any assumptions or unresolved fields (for example unknown license/repo).
 - Any new controlled-topic terms introduced (or explicit "none").
 - Commands run for import/validation and their outcomes.
-- Any fallback behavior used (for example validation command substitution).
+- Any fallback behavior used.
 
 ## Safety and Consistency
 

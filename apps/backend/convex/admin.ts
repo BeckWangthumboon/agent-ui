@@ -7,7 +7,8 @@ import { buildSplitComponentRecords } from "../../../shared/component-schema";
 import { ComponentDocumentValidator } from "./validators";
 
 type ComponentSearchRecord = Doc<"componentSearch">;
-type ExportableTable = "components" | "componentCode" | "componentSearch";
+type ComponentFileRecord = Doc<"componentFiles">;
+type ExportableTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -20,6 +21,16 @@ async function findSearchByComponentId(
     .query("componentSearch")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .unique();
+}
+
+async function findFilesByComponentId(
+  ctx: MutationCtx,
+  componentId: string,
+): Promise<ComponentFileRecord[]> {
+  return ctx.db
+    .query("componentFiles")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .collect();
 }
 
 function normalizePageSize(rawPageSize: number | undefined): number {
@@ -40,6 +51,7 @@ export const exportTablePage = query({
     table: v.union(
       v.literal("components"),
       v.literal("componentCode"),
+      v.literal("componentFiles"),
       v.literal("componentSearch"),
     ),
     cursor: v.optional(v.string()),
@@ -85,6 +97,35 @@ export const upsert = mutation({
       await ctx.db.replace(existingCode._id, records.code);
     } else {
       await ctx.db.insert("componentCode", records.code);
+    }
+
+    const existingFiles = await findFilesByComponentId(ctx, records.code.componentId);
+    const existingFileByPath = new Map(existingFiles.map((row) => [row.path, row]));
+    const nextFileByPath = new Map(records.files.map((row) => [row.path, row]));
+    const visitedPaths = new Set<string>();
+
+    for (const existingFile of existingFiles) {
+      if (visitedPaths.has(existingFile.path)) {
+        await ctx.db.delete(existingFile._id);
+        continue;
+      }
+      visitedPaths.add(existingFile.path);
+
+      const nextFile = nextFileByPath.get(existingFile.path);
+      if (!nextFile) {
+        await ctx.db.delete(existingFile._id);
+        continue;
+      }
+
+      await ctx.db.replace(existingFile._id, nextFile);
+    }
+
+    for (const nextFile of records.files) {
+      if (existingFileByPath.has(nextFile.path)) {
+        continue;
+      }
+
+      await ctx.db.insert("componentFiles", nextFile);
     }
 
     const existingSearch = await findSearchByComponentId(ctx, records.search.componentId);

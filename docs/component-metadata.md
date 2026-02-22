@@ -3,7 +3,7 @@
 This project currently uses two related shapes:
 
 - Local annotation/source shape: `data/components/<id>/meta.json` (`schemaVersion: 2`)
-- Backend/storage shape: three split Convex tables (`schemaVersion: 4`)
+- Backend/storage shape: split Convex tables (`schemaVersion: 4/5`)
 
 `data/components.csv` is a bulk editing surface that imports into local `meta.json` files.
 
@@ -13,7 +13,8 @@ This project currently uses two related shapes:
 2. Run `bun run data:import-csv` (alias: `bun run import:csv`) to write `data/components/<id>/meta.json`.
 3. Backend upsert (`apps/backend/convex/admin.ts`) accepts the v2 document and splits it into:
    - `components` (metadata)
-   - `componentCode` (code files)
+   - `componentCode` (code manifest: `entryFile`)
+   - `componentFiles` (one row per code/example file)
    - `componentSearch` (search text fields)
 4. Optional live Convex integrity check:
    - `bun run --cwd apps/backend validate:data`
@@ -23,7 +24,7 @@ This project currently uses two related shapes:
 ## Source of truth
 
 - For local editing/import: `data/components/<id>/meta.json` is canonical.
-- For live backend behavior: Convex tables (`components`, `componentCode`, `componentSearch`) are canonical.
+- For live backend behavior: Convex tables (`components`, `componentCode`, `componentFiles`, `componentSearch`) are canonical.
 
 ## CSV contract (import-from-csv)
 
@@ -59,6 +60,7 @@ Notes:
 - `dependencies` become objects with `kind: "runtime"` in v2 `meta.json`.
 - `code_file` must exist at `data/components/<id>/<code_file>` and must be non-empty.
 - Import currently writes a single code file entry in `code.files` (from `code_file`).
+- CSV import does not populate `example`; add/edit that directly in `meta.json` when needed.
 
 ## v2 local document fields (`meta.json`)
 
@@ -83,15 +85,19 @@ Notes:
 - `code`:
   - `entryFile`
   - `files[]` (`{ path, content }`)
+- `example` (optional):
+  - `{ path, content }`
 
-## v4 backend split records (derived on upsert)
+## v4/v5 backend split records (derived on upsert)
 
 When a v2 document is upserted, backend derives:
 
 - `components` (`schemaVersion: 4`):
   - `id`, `name`, `source`, `framework`, `styling`, `dependencies`, `motionLevel`, `primitiveLibrary`, `animationLibrary`, `constraints`
-- `componentCode` (`schemaVersion: 4`):
-  - `componentId`, `entryFile`, `files`
+- `componentCode` (`schemaVersion: 5`):
+  - `componentId`, `entryFile`
+- `componentFiles` (`schemaVersion: 5`):
+  - `componentId`, `kind` (`code | example`), `path`, `content`
 - `componentSearch` (`schemaVersion: 4`):
   - `componentId`, `intent`, `capabilities`, `synonyms`, `topics`
 

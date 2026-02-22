@@ -1,6 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 
-import { componentCodeFields, componentMetadataFields, componentSearchFields } from "./validators";
+import {
+  componentCodeFields,
+  componentFileFields,
+  componentMetadataFields,
+  componentSearchFields,
+} from "./validators";
 
 export default defineSchema({
   components: defineTable(componentMetadataFields)
@@ -13,5 +18,9 @@ export default defineSchema({
     .index("by_primitive_motion", ["primitiveLibrary", "motionLevel"])
     .index("by_animation_motion", ["animationLibrary", "motionLevel"]),
   componentCode: defineTable(componentCodeFields).index("by_component_id", ["componentId"]),
+  componentFiles: defineTable(componentFileFields)
+    .index("by_component_id", ["componentId"])
+    .index("by_component_kind", ["componentId", "kind"])
+    .index("by_component_path", ["componentId", "path"]),
   componentSearch: defineTable(componentSearchFields).index("by_component_id", ["componentId"]),
 });

@@ -12,6 +12,7 @@ import type {
 export type ViewCliOptions = {
   verbose?: boolean;
   code?: boolean;
+  example?: boolean;
   json?: boolean;
 };
 
@@ -36,6 +37,7 @@ type ViewComponent = {
     entryFile: string;
     files: ComponentCodeFile[];
   };
+  example?: ComponentCodeFile;
 };
 
 export async function runViewCommand(
@@ -54,6 +56,7 @@ export async function runViewCommand(
   const component = (await client.query(api.search.getById, {
     id: normalizedId,
     includeCode: Boolean(options.code || options.json),
+    includeExample: Boolean(options.example),
   })) as ViewComponent | null;
 
   if (!component) {
@@ -70,12 +73,14 @@ export async function runViewCommand(
   printComponent(component, {
     verbose: Boolean(options.verbose),
     includeCode: Boolean(options.code),
+    includeExample: Boolean(options.example),
   });
 }
 
 type PrintOptions = {
   verbose: boolean;
   includeCode: boolean;
+  includeExample: boolean;
 };
 
 function printComponent(component: ViewComponent, options: PrintOptions): void {
@@ -119,29 +124,38 @@ function printComponent(component: ViewComponent, options: PrintOptions): void {
     console.log(`code.fileCount: ${component.codeSummary.fileCount}`);
   }
 
-  if (!options.includeCode) {
+  if (options.includeCode) {
+    if (!component.code) {
+      console.log("code: unavailable");
+    } else {
+      const orderedFiles = [...component.code.files].sort((left, right) => {
+        if (left.path === component.code?.entryFile) {
+          return -1;
+        }
+
+        if (right.path === component.code?.entryFile) {
+          return 1;
+        }
+
+        return left.path.localeCompare(right.path, "en");
+      });
+
+      for (const file of orderedFiles) {
+        console.log(`--- code: ${file.path} ---`);
+        console.log(file.content);
+      }
+    }
+  }
+
+  if (!options.includeExample) {
     return;
   }
 
-  if (!component.code) {
-    console.log("code: unavailable");
+  if (!component.example) {
+    console.log("example: unavailable");
     return;
   }
 
-  const orderedFiles = [...component.code.files].sort((left, right) => {
-    if (left.path === component.code?.entryFile) {
-      return -1;
-    }
-
-    if (right.path === component.code?.entryFile) {
-      return 1;
-    }
-
-    return left.path.localeCompare(right.path, "en");
-  });
-
-  for (const file of orderedFiles) {
-    console.log(`--- code: ${file.path} ---`);
-    console.log(file.content);
-  }
+  console.log(`--- example: ${component.example.path} ---`);
+  console.log(component.example.content);
 }

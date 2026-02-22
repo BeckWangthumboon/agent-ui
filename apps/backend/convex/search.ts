@@ -14,6 +14,9 @@ import {
 type SearchRecord = Doc<"componentSearch">;
 type ComponentRecord = Doc<"components">;
 type ComponentCodeRecord = Doc<"componentCode">;
+type ComponentFileRecord = Doc<"componentFiles">;
+
+type ViewCodeFile = Pick<ComponentFileRecord, "path" | "content">;
 
 type SearchCandidate = {
   id: ComponentRecord["id"];
@@ -48,8 +51,9 @@ type ViewComponent = {
   };
   code?: {
     entryFile: ComponentCodeRecord["entryFile"];
-    files: ComponentCodeRecord["files"];
+    files: ViewCodeFile[];
   };
+  example?: ViewCodeFile;
 };
 
 type ComponentFilters = {
@@ -266,12 +270,23 @@ async function queryComponentsByFilters(
   return candidates.filter((component) => matchesAllFilters(component, filters));
 }
 
+function toViewCodeFiles(
+  fileRecords: ComponentFileRecord[],
+  kind: ComponentFileRecord["kind"],
+): ViewCodeFile[] {
+  return fileRecords
+    .filter((row) => row.kind === kind)
+    .map((row) => ({ path: row.path, content: row.content }))
+    .sort((left, right) => left.path.localeCompare(right.path, "en"));
+}
+
 async function toViewComponent(
   ctx: QueryCtx,
   component: ComponentRecord,
   includeCode: boolean,
+  includeExample: boolean,
 ): Promise<ViewComponent> {
-  const [search, code] = await Promise.all([
+  const [search, code, fileRecords] = await Promise.all([
     ctx.db
       .query("componentSearch")
       .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
@@ -280,7 +295,15 @@ async function toViewComponent(
       .query("componentCode")
       .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
       .unique(),
+    ctx.db
+      .query("componentFiles")
+      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
+      .collect(),
   ]);
+
+  const codeFiles = toViewCodeFiles(fileRecords, "code");
+  const exampleFiles = toViewCodeFiles(fileRecords, "example");
+  const defaultExample = exampleFiles[0];
 
   const base: ViewComponent = {
     schemaVersion: component.schemaVersion,
@@ -297,9 +320,17 @@ async function toViewComponent(
     constraints: component.constraints,
     codeSummary: {
       entryFile: code?.entryFile ?? "",
-      fileCount: code?.files.length ?? 0,
+      fileCount: codeFiles.length,
     },
   };
+
+  if (!includeCode && !includeExample) {
+    return base;
+  }
+
+  if (includeExample && defaultExample) {
+    base.example = defaultExample;
+  }
 
   if (!includeCode || !code) {
     return base;
@@ -309,7 +340,7 @@ async function toViewComponent(
     ...base,
     code: {
       entryFile: code.entryFile,
-      files: code.files,
+      files: codeFiles,
     },
   };
 }
@@ -351,6 +382,7 @@ export const getById = query({
   args: {
     id: v.string(),
     includeCode: v.optional(v.boolean()),
+    includeExample: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const normalizedId = args.id.trim();
@@ -365,6 +397,6 @@ export const getById = query({
       return null;
     }
 
-    return toViewComponent(ctx, component, args.includeCode ?? false);
+    return toViewComponent(ctx, component, args.includeCode ?? false, args.includeExample ?? false);
   },
 });

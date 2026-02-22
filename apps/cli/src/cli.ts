@@ -67,6 +67,7 @@ program
   .argument("<id>", "Component id (required)")
   .option("--verbose", "Show expanded metadata")
   .option("--code", "Print component code")
+  .option("--example", "Print canonical usage example")
   .option("--json", "Output JSON")
   .action(async (id: string, options: ViewCliOptions) => {
     const client = createClient();

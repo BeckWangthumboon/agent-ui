@@ -6,7 +6,7 @@ import { captureCommandOutput, createMockClient, createSampleViewComponent } fro
 describe("runViewCommand", () => {
   it("prints concise output by default", async () => {
     const component = createSampleViewComponent();
-    const { client } = createMockClient(async () => component);
+    const { client, calls } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
       await runViewCommand("core-button", {}, client);
@@ -19,6 +19,11 @@ describe("runViewCommand", () => {
     expect(text).toContain("source: https://ui.shadcn.com/docs/components/button");
     expect(text).not.toContain("source.library:");
     expect(text).not.toContain("--- code:");
+    expect(text).not.toContain("--- example:");
+    expect(calls[0]?.args).toMatchObject({
+      includeCode: false,
+      includeExample: false,
+    });
   });
 
   it("prints expanded metadata in --verbose mode", async () => {
@@ -56,7 +61,7 @@ describe("runViewCommand", () => {
 
   it("prints full json in --json mode", async () => {
     const component = createSampleViewComponent();
-    const { client } = createMockClient(async () => component);
+    const { client, calls } = createMockClient(async () => component);
 
     const output = await captureCommandOutput(async () => {
       await runViewCommand("core-button", { json: true }, client);
@@ -69,6 +74,44 @@ describe("runViewCommand", () => {
     expect(payload.capabilities).toBeUndefined();
     expect(payload.synonyms).toBeUndefined();
     expect(payload.topics).toBeUndefined();
+    expect(calls[0]?.args).toMatchObject({
+      includeCode: true,
+      includeExample: false,
+    });
+  });
+
+  it("prints canonical usage example in --example mode", async () => {
+    const component = createSampleViewComponent();
+    const { client, calls } = createMockClient(async () => component);
+
+    const output = await captureCommandOutput(async () => {
+      await runViewCommand("core-button", { example: true }, client);
+    });
+
+    const text = output.logs.join("\n");
+    expect(text).toContain("--- example: examples/button-demo.tsx ---");
+    expect(text).toContain("export function ButtonDemo()");
+    expect(calls[0]?.args).toMatchObject({
+      includeCode: false,
+      includeExample: true,
+    });
+  });
+
+  it("includes example in --json --example mode", async () => {
+    const component = createSampleViewComponent();
+    const { client, calls } = createMockClient(async () => component);
+
+    const output = await captureCommandOutput(async () => {
+      await runViewCommand("core-button", { json: true, example: true }, client);
+    });
+
+    expect(output.logs).toHaveLength(1);
+    const payload = JSON.parse(output.logs[0] ?? "{}");
+    expect(payload.example.path).toBe("examples/button-demo.tsx");
+    expect(calls[0]?.args).toMatchObject({
+      includeCode: true,
+      includeExample: true,
+    });
   });
 
   it("returns not found for missing ids", async () => {

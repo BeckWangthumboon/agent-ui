@@ -5,16 +5,18 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 
 import {
+  ComponentFileDocumentSchema,
   ComponentCodeDocumentSchema,
   ComponentMetadataDocumentSchema,
   ComponentSearchDocumentSchema,
-  type ComponentCodeDocument,
+  type ComponentFileDocument,
   type ComponentDocument,
+  type ComponentCodeDocument,
   type ComponentMetadataDocument,
   type ComponentSearchDocument,
 } from "../../../shared/component-schema";
 
-type SnapshotTable = "components" | "componentCode" | "componentSearch";
+type SnapshotTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
 
 type PaginationResult<TDocument> = {
   page: TDocument[];
@@ -43,15 +45,26 @@ async function main(): Promise<void> {
 
   const rawMetadata = await fetchAllDocuments(client, "components");
   const rawCode = await fetchAllDocuments(client, "componentCode");
+  const rawFiles = await fetchAllDocuments(client, "componentFiles");
   const rawSearch = await fetchAllDocuments(client, "componentSearch");
 
   const { validRows: metadataRows, errors: metadataErrors } = parseMetadataRows(rawMetadata);
   const { validRows: codeRows, errors: codeErrors } = parseCodeRows(rawCode);
+  const { validRows: fileRows, errors: fileErrors } = parseFileRows(rawFiles);
   const { validRows: searchRows, errors: searchErrors } = parseSearchRows(rawSearch);
 
-  const parseErrors = [...metadataErrors, ...codeErrors, ...searchErrors];
+  const parseErrors = [...metadataErrors, ...codeErrors, ...fileErrors, ...searchErrors];
 
   const codeByComponentId = new Map(codeRows.map((row) => [row.componentId, row]));
+  const filesByComponentId = new Map<string, ComponentFileDocument[]>();
+  for (const fileRow of fileRows) {
+    const files = filesByComponentId.get(fileRow.componentId);
+    if (files) {
+      files.push(fileRow);
+    } else {
+      filesByComponentId.set(fileRow.componentId, [fileRow]);
+    }
+  }
   const searchByComponentId = new Map(searchRows.map((row) => [row.componentId, row]));
 
   await rm(componentsDir, { recursive: true, force: true });
@@ -73,7 +86,8 @@ async function main(): Promise<void> {
     }
 
     const search = searchByComponentId.get(metadata.id);
-    const componentDocument = toComponentDocument(metadata, code, search);
+    const componentFiles = filesByComponentId.get(metadata.id) ?? [];
+    const componentDocument = toComponentDocument(metadata, code, componentFiles, search);
     const componentDir = join(componentsDir, componentDocument.id);
 
     await mkdir(componentDir, { recursive: true });
@@ -83,7 +97,11 @@ async function main(): Promise<void> {
       "utf8",
     );
 
-    for (const file of componentDocument.code.files) {
+    const filesToWrite = [
+      ...componentDocument.code.files,
+      ...(componentDocument.example ? [componentDocument.example] : []),
+    ];
+    for (const file of filesToWrite) {
       const filePath = join(componentDir, file.path);
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, file.content, "utf8");
@@ -94,10 +112,10 @@ async function main(): Promise<void> {
 
   console.log(`Convex source: ${convexUrl}`);
   console.log(
-    `Rows fetched: components=${rawMetadata.length}, componentCode=${rawCode.length}, componentSearch=${rawSearch.length}`,
+    `Rows fetched: components=${rawMetadata.length}, componentCode=${rawCode.length}, componentFiles=${rawFiles.length}, componentSearch=${rawSearch.length}`,
   );
   console.log(
-    `Rows parsed: components=${metadataRows.length}, componentCode=${codeRows.length}, componentSearch=${searchRows.length}`,
+    `Rows parsed: components=${metadataRows.length}, componentCode=${codeRows.length}, componentFiles=${fileRows.length}, componentSearch=${searchRows.length}`,
   );
   console.log(`Wrote ${written} component directories to ${toDisplayPath(componentsDir)}`);
 
@@ -176,11 +194,32 @@ function parseCodeRows(rows: unknown[]): { validRows: ComponentCodeDocument[]; e
   for (const row of rows) {
     const normalized = stripConvexSystemFields(row);
     const parsed = ComponentCodeDocumentSchema.safeParse(normalized);
+    if (parsed.success) {
+      validRows.push(parsed.data);
+      continue;
+    }
+
+    const candidateId = readStringField(normalized, "componentId");
+    for (const issue of parsed.error.issues) {
+      errors.push(formatParseIssue("componentCode", candidateId, issue.path, issue.message));
+    }
+  }
+
+  return { validRows, errors };
+}
+
+function parseFileRows(rows: unknown[]): { validRows: ComponentFileDocument[]; errors: string[] } {
+  const validRows: ComponentFileDocument[] = [];
+  const errors: string[] = [];
+
+  for (const row of rows) {
+    const normalized = stripConvexSystemFields(row);
+    const parsed = ComponentFileDocumentSchema.safeParse(normalized);
 
     if (!parsed.success) {
       const candidateId = readStringField(normalized, "componentId");
       for (const issue of parsed.error.issues) {
-        errors.push(formatParseIssue("componentCode", candidateId, issue.path, issue.message));
+        errors.push(formatParseIssue("componentFiles", candidateId, issue.path, issue.message));
       }
       continue;
     }
@@ -219,8 +258,17 @@ function parseSearchRows(rows: unknown[]): {
 function toComponentDocument(
   metadata: ComponentMetadataDocument,
   code: ComponentCodeDocument,
+  componentFiles: ComponentFileDocument[],
   search: ComponentSearchDocument | undefined,
 ): ComponentDocument {
+  const codeFilesFromTable = componentFiles
+    .filter((file) => file.kind === "code")
+    .map((file) => ({ path: file.path, content: file.content }))
+    .sort((left, right) => left.path.localeCompare(right.path, "en"));
+  const defaultExample = componentFiles
+    .filter((file) => file.kind === "example")
+    .sort((left, right) => left.path.localeCompare(right.path, "en"))[0];
+
   return {
     schemaVersion: 2,
     id: metadata.id,
@@ -239,8 +287,16 @@ function toComponentDocument(
     constraints: metadata.constraints,
     code: {
       entryFile: code.entryFile,
-      files: code.files,
+      files: codeFilesFromTable,
     },
+    ...(defaultExample
+      ? {
+          example: {
+            path: defaultExample.path,
+            content: defaultExample.content,
+          },
+        }
+      : {}),
   };
 }
 

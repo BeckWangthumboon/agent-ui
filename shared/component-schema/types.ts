@@ -31,6 +31,7 @@ const DependencyKindValues = literalTupleFromUnion(DEPENDENCY_KINDS);
 const ComponentTopicValues = literalTupleFromUnion(COMPONENT_TOPICS);
 const ComponentPrimitiveLibraryValues = literalTupleFromUnion(COMPONENT_PRIMITIVE_LIBRARIES);
 const ComponentAnimationLibraryValues = literalTupleFromUnion(COMPONENT_ANIMATION_LIBRARIES);
+const ComponentFileKindValues = ["code", "example"] as const;
 
 export const ComponentFrameworkValidator = COMPONENT_FRAMEWORKS;
 export type ComponentFramework = Infer<typeof ComponentFrameworkValidator>;
@@ -77,6 +78,9 @@ export const ComponentCodeFileValidator = v.object({
 });
 export type ComponentCodeFile = Infer<typeof ComponentCodeFileValidator>;
 
+export const ComponentFileKindValidator = v.union(v.literal("code"), v.literal("example"));
+export type ComponentFileKind = Infer<typeof ComponentFileKindValidator>;
+
 export const ComponentCodeValidator = v.object({
   entryFile: v.string(),
   files: v.array(ComponentCodeFileValidator),
@@ -101,6 +105,7 @@ export const componentDocumentFields = {
   animationLibrary: v.optional(ComponentAnimationLibraryValidator),
   constraints: v.optional(ComponentConstraintsValidator),
   code: ComponentCodeValidator,
+  example: v.optional(ComponentCodeFileValidator),
 } as const;
 
 export const ComponentDocumentValidator = v.object(componentDocumentFields);
@@ -124,14 +129,28 @@ export const ComponentMetadataDocumentValidator = v.object(componentMetadataFiel
 export type ComponentMetadataDocument = Infer<typeof ComponentMetadataDocumentValidator>;
 
 export const componentCodeFields = {
-  schemaVersion: v.literal(4),
+  schemaVersion: v.literal(5),
   componentId: v.string(),
   entryFile: v.string(),
-  files: v.array(ComponentCodeFileValidator),
 } as const;
 
-export const ComponentCodeDocumentValidator = v.object(componentCodeFields);
+export const ComponentCodeDocumentValidator = v.object({
+  schemaVersion: v.literal(5),
+  componentId: v.string(),
+  entryFile: v.string(),
+});
 export type ComponentCodeDocument = Infer<typeof ComponentCodeDocumentValidator>;
+
+export const componentFileFields = {
+  schemaVersion: v.literal(5),
+  componentId: v.string(),
+  kind: ComponentFileKindValidator,
+  path: v.string(),
+  content: v.string(),
+} as const;
+
+export const ComponentFileDocumentValidator = v.object(componentFileFields);
+export type ComponentFileDocument = Infer<typeof ComponentFileDocumentValidator>;
 
 export const componentSearchFields = {
   schemaVersion: v.literal(4),
@@ -178,6 +197,8 @@ export const ComponentTopicSchema = z.enum(ComponentTopicValues);
 export const ComponentPrimitiveLibrarySchema = z.enum(ComponentPrimitiveLibraryValues);
 
 export const ComponentAnimationLibrarySchema = z.enum(ComponentAnimationLibraryValues);
+
+export const ComponentFileKindSchema = z.enum(ComponentFileKindValues);
 
 export const DependencySchema: z.ZodType<Dependency> = z.strictObject({
   name: NonEmptyTextSchema,
@@ -228,6 +249,8 @@ export const ComponentCodeSchema: z.ZodType<ComponentCode> = z
     }
   });
 
+export const ComponentExampleSchema: z.ZodType<ComponentCodeFile> = ComponentCodeFileSchema;
+
 export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObject({
   schemaVersion: z.literal(2),
   id: NonEmptyTextSchema,
@@ -245,6 +268,7 @@ export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObj
   animationLibrary: ComponentAnimationLibrarySchema.optional(),
   constraints: ComponentConstraintsSchema.optional(),
   code: ComponentCodeSchema,
+  example: ComponentExampleSchema.optional(),
 });
 
 export const ComponentMetadataDocumentSchema: z.ZodType<ComponentMetadataDocument> = z.strictObject(
@@ -264,10 +288,17 @@ export const ComponentMetadataDocumentSchema: z.ZodType<ComponentMetadataDocumen
 );
 
 export const ComponentCodeDocumentSchema: z.ZodType<ComponentCodeDocument> = z.strictObject({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   componentId: NonEmptyTextSchema,
   entryFile: RelativeFilePathSchema,
-  files: z.array(ComponentCodeFileSchema).min(1),
+});
+
+export const ComponentFileDocumentSchema: z.ZodType<ComponentFileDocument> = z.strictObject({
+  schemaVersion: z.literal(5),
+  componentId: NonEmptyTextSchema,
+  kind: ComponentFileKindSchema,
+  path: RelativeFilePathSchema,
+  content: z.string().min(1),
 });
 
 export const ComponentSearchDocumentSchema: z.ZodType<ComponentSearchDocument> = z.strictObject({

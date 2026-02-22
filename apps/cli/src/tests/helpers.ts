@@ -102,6 +102,10 @@ export function createSampleComponent(): ComponentDocument {
         },
       ],
     },
+    example: {
+      path: "examples/button-demo.tsx",
+      content: "export function ButtonDemo() { return <Button />; }",
+    },
   };
 }
 
@@ -184,6 +188,7 @@ export type ViewComponent = {
     fileCount: number;
   };
   code?: ComponentDocument["code"];
+  example?: ComponentDocument["example"];
 };
 
 export function createSampleViewComponent(): ViewComponent {
@@ -207,5 +212,6 @@ export function createSampleViewComponent(): ViewComponent {
       fileCount: component.code.files.length,
     },
     code: component.code,
+    example: component.example,
   };
 }

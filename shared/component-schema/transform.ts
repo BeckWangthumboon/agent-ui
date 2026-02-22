@@ -1,5 +1,6 @@
 import type {
   ComponentAnimationLibrary,
+  ComponentFileDocument,
   ComponentCodeDocument,
   ComponentDocument,
   ComponentMetadataDocument,
@@ -94,6 +95,7 @@ export async function buildPublicComponentId(component: ComponentDocument): Prom
 export async function buildSplitComponentRecords(component: ComponentDocument): Promise<{
   metadata: ComponentMetadataDocument;
   code: ComponentCodeDocument;
+  files: ComponentFileDocument[];
   search: ComponentSearchDocument;
 }> {
   const id = await buildPublicComponentId(component);
@@ -115,11 +117,28 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
   };
 
   const code: ComponentCodeDocument = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     componentId: id,
     entryFile: component.code.entryFile,
-    files: component.code.files,
   };
+
+  const files: ComponentFileDocument[] = component.code.files.map((file) => ({
+    schemaVersion: 5,
+    componentId: id,
+    kind: "code",
+    path: file.path,
+    content: file.content,
+  }));
+
+  if (component.example) {
+    files.push({
+      schemaVersion: 5,
+      componentId: id,
+      kind: "example",
+      path: component.example.path,
+      content: component.example.content,
+    });
+  }
 
   const search: ComponentSearchDocument = {
     schemaVersion: 4,
@@ -133,6 +152,7 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
   return {
     metadata,
     code,
+    files,
     search,
   };
 }
