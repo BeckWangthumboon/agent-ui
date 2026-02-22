@@ -1,5 +1,5 @@
 import type { ConvexHttpClient } from "convex/browser";
-import type { ComponentDocument } from "../../../../shared/component-schema";
+import type { ComponentDocument, ComponentInstall } from "../../../../shared/component-schema";
 
 export type QueryCall = {
   functionRef: unknown;
@@ -148,6 +148,7 @@ export type ComponentMetadata = {
   framework: ComponentDocument["framework"];
   styling: ComponentDocument["styling"];
   dependencies: ComponentDocument["dependencies"];
+  install?: ComponentInstall;
   intent: string;
   motionLevel: ComponentDocument["motionLevel"];
   primitiveLibrary: string;
@@ -163,6 +164,11 @@ export function createSampleComponentMetadata(): ComponentMetadata {
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
+    install: {
+      mode: "command",
+      source: "manual",
+      template: "shadcn@latest add button",
+    },
     intent: component.intent,
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary ?? "none",

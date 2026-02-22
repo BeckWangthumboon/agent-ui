@@ -7,6 +7,8 @@ import {
   DEFAULT_AGENT_UI_CONFIG,
   DEFAULT_CONFIG_RELATIVE_PATH,
   loadAgentUiConfig,
+  mergeAddOptions,
+  parsePackageManager,
   mergeSearchOptions,
 } from "../config";
 
@@ -179,5 +181,55 @@ describe("mergeSearchOptions", () => {
     expect(merged.primitiveLibrary).toEqual(["radix"]);
     expect(merged.relax).toBe(true);
     expect(merged.json).toBe(true);
+  });
+});
+
+describe("add config helpers", () => {
+  it("parses supported package managers", () => {
+    expect(parsePackageManager("npx")).toBe("npx");
+    expect(parsePackageManager("BUNX")).toBe("bunx");
+    expect(parsePackageManager("pnpm")).toBe("pnpm");
+    expect(parsePackageManager("yarn")).toBe("yarn");
+  });
+
+  it("rejects unsupported package managers", () => {
+    expect(() => parsePackageManager("pnpmx")).toThrow("Expected one of:");
+  });
+
+  it("merges add options with CLI precedence", () => {
+    const merged = mergeAddOptions(
+      {
+        packageManager: "yarn",
+        json: true,
+      },
+      {
+        schemaVersion: 1,
+        search: {
+          limit: 10,
+        },
+        add: {
+          packageManager: "pnpm",
+        },
+      },
+    );
+
+    expect(merged.packageManager).toBe("yarn");
+    expect(merged.json).toBe(true);
+  });
+
+  it("uses config defaults when add flags are omitted", () => {
+    const merged = mergeAddOptions(
+      {},
+      {
+        schemaVersion: 1,
+        search: undefined,
+        add: {
+          packageManager: "bunx",
+        },
+      },
+    );
+
+    expect(merged.packageManager).toBe("bunx");
+    expect(merged.json).toBeUndefined();
   });
 });

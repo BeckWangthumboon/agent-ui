@@ -145,11 +145,11 @@ async function fetchAllDocuments(
   let cursor: string | undefined;
 
   while (true) {
-    const result = (await client.query(exportTablePage, {
+    const result: PaginationResult<unknown> = await client.query(exportTablePage, {
       table,
       cursor,
       pageSize: DEFAULT_PAGE_SIZE,
-    })) as PaginationResult<unknown>;
+    });
 
     documents.push(...result.page);
 
@@ -278,6 +278,7 @@ function toComponentDocument(
     framework: metadata.framework,
     styling: metadata.styling,
     dependencies: metadata.dependencies,
+    install: metadata.install,
     intent: search?.intent ?? metadata.name,
     capabilities: search?.capabilities ?? [],
     synonyms: search?.synonyms ?? [],

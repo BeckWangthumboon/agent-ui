@@ -9,8 +9,14 @@ import {
   parseStyling,
   type SearchCliOptions,
 } from "./search.js";
+import { runAddCommand, type AddCliOptions } from "./add.js";
 import { runViewCommand, type ViewCliOptions } from "./view.js";
-import { loadAgentUiConfig, mergeSearchOptions } from "./config.js";
+import {
+  loadAgentUiConfig,
+  mergeAddOptions,
+  mergeSearchOptions,
+  parsePackageManager,
+} from "./config.js";
 import { CLI_NAME } from "./constants.js";
 
 const program = new Command();
@@ -76,6 +82,40 @@ program
     }
 
     await runViewCommand(id, options, client);
+  });
+
+program
+  .command("add")
+  .description("Print install command and manual steps for a component id")
+  .argument("<id>", "Component id (required)")
+  .option("--package-manager <manager>", "Package manager: npx|bunx|pnpm|yarn", parsePackageManager)
+  .option("--json", "Output JSON")
+  .action(async (id: string, options: AddCliOptions, command: Command) => {
+    const globalOptions = command.optsWithGlobals<{ config?: string }>();
+    let loadedConfig = null;
+
+    try {
+      const loaded = await loadAgentUiConfig({
+        commandName: "add",
+        explicitPath: globalOptions.config,
+      });
+      loadedConfig = loaded.config;
+    } catch (error) {
+      if (globalOptions.config || !errorMessage(error).includes("No git project found from")) {
+        console.error(errorMessage(error));
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    const mergedOptions = mergeAddOptions(options, loadedConfig);
+
+    const client = createClient();
+    if (!client) {
+      return;
+    }
+
+    await runAddCommand(id, mergedOptions, client);
   });
 
 await program.parseAsync(process.argv);

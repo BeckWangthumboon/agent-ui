@@ -22,7 +22,7 @@ Binary name:
 
 Global options:
 
-- `--config <path>`: explicit path to config file. Currently consumed by `search`.
+- `--config <path>`: explicit path to config file. Consumed by `search` and `add`.
 - `--help`
 
 ### `search <query>`
@@ -84,7 +84,36 @@ Failure cases:
 
 - Empty id.
 - Component not found.
-- Missing `CONVEX_URL`.
+
+### `add <id>`
+
+Prints install instructions for a component.
+
+Options:
+
+- `--package-manager <manager>` (`npx|bunx|pnpm|yarn`)
+- `--json`
+
+Behavior:
+
+- Trims and validates non-empty id.
+- Loads optional config defaults for `add.packageManager`.
+- Creates a Convex client from `CONVEX_URL`.
+- Queries `api.components.getMetadataById`.
+- For `install.mode=command`, prints the rendered install command.
+- For `install.mode=manual`, prints ordered manual steps.
+- For `install.mode=command+manual`, prints both command and steps.
+- Runner mapping:
+  - `npx <template>`
+  - `bunx <template>`
+  - `pnpm dlx <template>`
+  - `yarn dlx <template>`
+
+Failure cases:
+
+- Empty id.
+- Component not found.
+- Missing install metadata.
 
 ## Config File
 
@@ -105,6 +134,8 @@ Current supported config section:
   - `motion[]`
   - `primitiveLibrary[]`
   - `json`
+- `add` defaults:
+  - `packageManager` (`npx|bunx|pnpm|yarn`)
 
 `search --json` fields include:
 
@@ -124,6 +155,9 @@ Default config payload written on first `search` run when missing:
     "motion": ["none", "minimal"],
     "primitiveLibrary": ["radix", "base-ui"],
     "json": true
+  },
+  "add": {
+    "packageManager": "npx"
   }
 }
 ```
@@ -153,6 +187,7 @@ Entrypoints:
 - `apps/cli/src/cli.ts`: command wiring and global error handling.
 - `apps/cli/src/search.ts`: search pipeline, ranking, and output formatting.
 - `apps/cli/src/view.ts`: detail lookup and display formatting.
+- `apps/cli/src/add.ts`: install command and manual steps output.
 - `apps/cli/src/config.ts`: schema, load/validate/create logic, CLI default merge.
 - `apps/cli/src/agentPaths.ts`: Git-bounded `.agents` discovery and errors.
 

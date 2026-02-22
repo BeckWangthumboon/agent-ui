@@ -111,6 +111,7 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
+    install: component.install,
     motionLevel: component.motionLevel,
     primitiveLibrary,
     animationLibrary,

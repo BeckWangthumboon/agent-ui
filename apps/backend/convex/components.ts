@@ -19,6 +19,7 @@ type ComponentMetadata = Pick<
   | "framework"
   | "styling"
   | "dependencies"
+  | "install"
   | "motionLevel"
   | "primitiveLibrary"
   | "animationLibrary"
@@ -64,6 +65,7 @@ function toComponentMetadata(
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
+    install: component.install,
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary,
     animationLibrary: component.animationLibrary,

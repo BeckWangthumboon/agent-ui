@@ -13,6 +13,7 @@ import type { SearchCliOptions } from "./search.js";
 
 export const DEFAULT_CONFIG_RELATIVE_PATH = ".agents/agent-ui.json";
 const DEFAULT_CONFIG_FILENAME = "agent-ui.json";
+const PackageManagerSchema = z.enum(["npx", "bunx", "pnpm", "yarn"]);
 
 const SearchConfigSchema = z
   .strictObject({
@@ -25,12 +26,20 @@ const SearchConfigSchema = z
   })
   .optional();
 
+const AddConfigSchema = z
+  .strictObject({
+    packageManager: PackageManagerSchema.optional(),
+  })
+  .optional();
+
 const AgentUiConfigSchema = z.strictObject({
   schemaVersion: z.literal(1),
   search: SearchConfigSchema,
+  add: AddConfigSchema,
 });
 
 export type AgentUiConfig = z.infer<typeof AgentUiConfigSchema>;
+export type PackageManager = z.infer<typeof PackageManagerSchema>;
 
 export const DEFAULT_AGENT_UI_CONFIG: AgentUiConfig = {
   schemaVersion: 1,
@@ -41,6 +50,9 @@ export const DEFAULT_AGENT_UI_CONFIG: AgentUiConfig = {
     motion: ["none", "minimal"],
     primitiveLibrary: ["radix", "base-ui"],
     json: true,
+  },
+  add: {
+    packageManager: "npx",
   },
 };
 
@@ -120,5 +132,28 @@ export function mergeSearchOptions(
     primitiveLibrary: cliOptions.primitiveLibrary ?? searchDefaults?.primitiveLibrary,
     relax: cliOptions.relax,
     json: cliOptions.json ?? searchDefaults?.json,
+  };
+}
+
+type AddOptions = {
+  packageManager?: PackageManager;
+  json?: boolean;
+};
+
+export function parsePackageManager(rawValue: string): PackageManager {
+  const parsed = PackageManagerSchema.safeParse(rawValue.trim().toLowerCase());
+  if (!parsed.success) {
+    throw new Error(`Expected one of: ${PackageManagerSchema.options.join(", ")}`);
+  }
+
+  return parsed.data;
+}
+
+export function mergeAddOptions(cliOptions: AddOptions, config: AgentUiConfig | null): AddOptions {
+  const addDefaults = config?.add;
+
+  return {
+    packageManager: cliOptions.packageManager ?? addDefaults?.packageManager,
+    json: cliOptions.json,
   };
 }

@@ -7,7 +7,8 @@
     "generate": "bunx convex dev --once",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "sync:data": "bun run scripts/sync-convex-data.ts",
-    "validate:data": "bun run scripts/validate-convex-data.ts"
+    "validate:data": "bun run scripts/validate-convex-data.ts",
+    "report:missing-install": "bun run scripts/report-missing-install.ts"
   },
   "dependencies": {
     "@convex-dev/migrations": "^0.3.1",

@@ -33,6 +33,7 @@ describe("cli command wiring", () => {
 
     const stdout = decoder.decode(result.stdout);
     expect(stdout).toContain("view|v [options] <id>");
+    expect(stdout).toContain("add [options] <id>");
   });
 
   it("fails fast when CONVEX_URL is missing", () => {
@@ -40,6 +41,22 @@ describe("cli command wiring", () => {
 
     const result = Bun.spawnSync({
       cmd: [bunExecutable, "run", cliEntry, "view", "core-button"],
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    expect(result.exitCode).toBe(1);
+
+    const stderr = decoder.decode(result.stderr);
+    expect(stderr).toContain("CONVEX_URL is required.");
+  });
+
+  it("fails fast for add when CONVEX_URL is missing", () => {
+    const env = envWithoutConvexUrl();
+
+    const result = Bun.spawnSync({
+      cmd: [bunExecutable, "run", cliEntry, "add", "core-button"],
       env,
       stdout: "pipe",
       stderr: "pipe",

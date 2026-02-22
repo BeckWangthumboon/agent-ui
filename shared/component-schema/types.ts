@@ -32,6 +32,8 @@ const ComponentTopicValues = literalTupleFromUnion(COMPONENT_TOPICS);
 const ComponentPrimitiveLibraryValues = literalTupleFromUnion(COMPONENT_PRIMITIVE_LIBRARIES);
 const ComponentAnimationLibraryValues = literalTupleFromUnion(COMPONENT_ANIMATION_LIBRARIES);
 const ComponentFileKindValues = ["code", "example"] as const;
+const InstallModeValues = ["command", "manual", "command+manual"] as const;
+const InstallSourceValues = ["manual", "shadcn"] as const;
 
 export const ComponentFrameworkValidator = COMPONENT_FRAMEWORKS;
 export type ComponentFramework = Infer<typeof ComponentFrameworkValidator>;
@@ -54,11 +56,41 @@ export type ComponentPrimitiveLibrary = Infer<typeof ComponentPrimitiveLibraryVa
 export const ComponentAnimationLibraryValidator = COMPONENT_ANIMATION_LIBRARIES;
 export type ComponentAnimationLibrary = Infer<typeof ComponentAnimationLibraryValidator>;
 
+export const InstallModeValidator = v.union(
+  v.literal("command"),
+  v.literal("manual"),
+  v.literal("command+manual"),
+);
+export type InstallMode = Infer<typeof InstallModeValidator>;
+
+export const InstallSourceValidator = v.union(v.literal("manual"), v.literal("shadcn"));
+export type InstallSource = Infer<typeof InstallSourceValidator>;
+
 export const DependencyValidator = v.object({
   name: v.string(),
   kind: DependencyKindValidator,
 });
 export type Dependency = Infer<typeof DependencyValidator>;
+
+export const ComponentInstallValidator = v.union(
+  v.object({
+    mode: v.literal("command"),
+    source: InstallSourceValidator,
+    template: v.string(),
+  }),
+  v.object({
+    mode: v.literal("manual"),
+    source: v.literal("manual"),
+    steps: v.array(v.string()),
+  }),
+  v.object({
+    mode: v.literal("command+manual"),
+    source: InstallSourceValidator,
+    template: v.string(),
+    steps: v.array(v.string()),
+  }),
+);
+export type ComponentInstall = Infer<typeof ComponentInstallValidator>;
 
 export const ComponentSourceValidator = v.object({
   library: v.optional(v.string()),
@@ -96,6 +128,7 @@ export const componentDocumentFields = {
   framework: ComponentFrameworkValidator,
   styling: ComponentStylingValidator,
   dependencies: v.array(DependencyValidator),
+  install: v.optional(ComponentInstallValidator),
   intent: v.string(),
   capabilities: v.array(v.string()),
   synonyms: v.array(v.string()),
@@ -119,6 +152,7 @@ export const componentMetadataFields = {
   framework: ComponentFrameworkValidator,
   styling: ComponentStylingValidator,
   dependencies: v.array(DependencyValidator),
+  install: v.optional(ComponentInstallValidator),
   motionLevel: ComponentMotionValidator,
   primitiveLibrary: ComponentPrimitiveLibraryValidator,
   animationLibrary: ComponentAnimationLibraryValidator,
@@ -200,10 +234,35 @@ export const ComponentAnimationLibrarySchema = z.enum(ComponentAnimationLibraryV
 
 export const ComponentFileKindSchema = z.enum(ComponentFileKindValues);
 
+export const InstallModeSchema = z.enum(InstallModeValues);
+
+export const InstallSourceSchema = z.enum(InstallSourceValues);
+
 export const DependencySchema: z.ZodType<Dependency> = z.strictObject({
   name: NonEmptyTextSchema,
   kind: DependencyKindSchema.default("runtime"),
 });
+
+const InstallStepsSchema = z.array(NonEmptyTextSchema).min(1);
+
+export const ComponentInstallSchema: z.ZodType<ComponentInstall> = z.discriminatedUnion("mode", [
+  z.strictObject({
+    mode: z.literal("command"),
+    source: InstallSourceSchema,
+    template: NonEmptyTextSchema,
+  }),
+  z.strictObject({
+    mode: z.literal("manual"),
+    source: z.literal("manual"),
+    steps: InstallStepsSchema,
+  }),
+  z.strictObject({
+    mode: z.literal("command+manual"),
+    source: InstallSourceSchema,
+    template: NonEmptyTextSchema,
+    steps: InstallStepsSchema,
+  }),
+]);
 
 export const ComponentSourceSchema: z.ZodType<ComponentSource> = z.strictObject({
   library: NonEmptyTextSchema.optional(),
@@ -259,6 +318,7 @@ export const ComponentDocumentSchema: z.ZodType<ComponentDocument> = z.strictObj
   framework: ComponentFrameworkSchema,
   styling: ComponentStylingSchema,
   dependencies: z.array(DependencySchema).default([]),
+  install: ComponentInstallSchema.optional(),
   intent: NonEmptyTextSchema,
   capabilities: z.array(NonEmptyTextSchema).default([]),
   synonyms: z.array(NonEmptyTextSchema).default([]),
@@ -280,6 +340,7 @@ export const ComponentMetadataDocumentSchema: z.ZodType<ComponentMetadataDocumen
     framework: ComponentFrameworkSchema,
     styling: ComponentStylingSchema,
     dependencies: z.array(DependencySchema).default([]),
+    install: ComponentInstallSchema.optional(),
     motionLevel: ComponentMotionSchema,
     primitiveLibrary: ComponentPrimitiveLibrarySchema,
     animationLibrary: ComponentAnimationLibrarySchema,

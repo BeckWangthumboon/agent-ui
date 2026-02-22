@@ -7,6 +7,12 @@ type CodeFile = {
   path: string;
   content: string;
 };
+type InstallDefinition = {
+  mode: "command" | "manual" | "command+manual";
+  source: "manual" | "shadcn";
+  template?: string;
+  steps?: string[];
+};
 
 type CliOptions = {
   inputPath: string;
@@ -90,6 +96,7 @@ async function main(): Promise<void> {
     const preservedConstraints = isRecord(existingDocument?.constraints)
       ? existingDocument.constraints
       : undefined;
+    const preservedInstall = readInstallDefinition(existingDocument?.install);
 
     const document: UnknownRecord = {
       schemaVersion: 2,
@@ -100,7 +107,7 @@ async function main(): Promise<void> {
       styling: readRequired(row, "styling"),
       dependencies: splitPipe(readOptional(row, "dependencies")).map((name) => ({
         name,
-        kind: "runtime" as const,
+        kind: "runtime",
       })),
       intent: readRequired(row, "intent"),
       capabilities: splitPipe(readOptional(row, "capabilities")),
@@ -124,6 +131,9 @@ async function main(): Promise<void> {
     }
     if (preservedExample) {
       document.example = preservedExample;
+    }
+    if (preservedInstall) {
+      document.install = preservedInstall;
     }
 
     await writeFile(metaPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
@@ -244,6 +254,83 @@ function readCodeFile(value: unknown): CodeFile | undefined {
   }
 
   return { path, content };
+}
+
+function readInstallDefinition(value: unknown): InstallDefinition | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const mode = readOptionalString(value.mode);
+  const source = readOptionalString(value.source);
+
+  if (!mode || !source) {
+    return undefined;
+  }
+
+  if (source !== "manual" && source !== "shadcn") {
+    return undefined;
+  }
+
+  if (mode === "command") {
+    const template = readOptionalString(value.template);
+    if (!template) {
+      return undefined;
+    }
+
+    return {
+      mode,
+      source,
+      template,
+    };
+  }
+
+  if (mode === "manual") {
+    if (source !== "manual") {
+      return undefined;
+    }
+
+    const steps = readInstallSteps(value.steps);
+    if (!steps || steps.length === 0) {
+      return undefined;
+    }
+
+    return {
+      mode,
+      source,
+      steps,
+    };
+  }
+
+  if (mode === "command+manual") {
+    const template = readOptionalString(value.template);
+    const steps = readInstallSteps(value.steps);
+
+    if (!template || !steps || steps.length === 0) {
+      return undefined;
+    }
+
+    return {
+      mode,
+      source,
+      template,
+      steps,
+    };
+  }
+
+  return undefined;
+}
+
+function readInstallSteps(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const steps = value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
+
+  return steps.length > 0 ? steps : undefined;
 }
 
 function readOptionalString(value: unknown): string | undefined {
