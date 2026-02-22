@@ -10,7 +10,7 @@ This project currently uses two related shapes:
 ## Current data flow
 
 1. Edit `data/components.csv`.
-2. Run `bun run data:import-csv` (alias: `bun run import:csv`) to write `data/components/<id>/meta.json`.
+2. Run `bun run data:import-csv` (alias: `bun run import:csv`) to update `data/components/<id>/meta.json`.
 3. Backend upsert (`apps/backend/convex/admin.ts`) accepts the v2 document and splits it into:
    - `components` (metadata)
    - `componentCode` (code manifest: `entryFile`)
@@ -59,8 +59,11 @@ Notes:
 - `capabilities`, `synonyms`, `topics`, `dependencies` are `|`-delimited, trimmed, and deduplicated case-insensitively.
 - `dependencies` become objects with `kind: "runtime"` in v2 `meta.json`.
 - `code_file` must exist at `data/components/<id>/<code_file>` and must be non-empty.
-- Import currently writes a single code file entry in `code.files` (from `code_file`).
+- Import preserves non-CSV fields from existing `meta.json` when present (`example`, `constraints`, `primitiveLibrary`, `animationLibrary`, and extra `code.files` entries).
+- Import updates `code.entryFile` from `code_file` and refreshes that file's content from disk.
 - CSV import does not populate `example`; add/edit that directly in `meta.json` when needed.
+- Canonical local example filename is `example.tsx` when generated from Convex sync.
+- `example.tsx` is reserved for canonical examples; do not use it as a code file path in `code.files`.
 
 ## v2 local document fields (`meta.json`)
 
@@ -87,6 +90,7 @@ Notes:
   - `files[]` (`{ path, content }`)
 - `example` (optional):
   - `{ path, content }`
+  - canonical path convention: `example.tsx`
 
 ## v4/v5 backend split records (derived on upsert)
 
@@ -98,6 +102,7 @@ When a v2 document is upserted, backend derives:
   - `componentId`, `entryFile`
 - `componentFiles` (`schemaVersion: 5`):
   - `componentId`, `kind` (`code | example`), `path`, `content`
+  - runtime convention: one canonical example path, `example.tsx`
 - `componentSearch` (`schemaVersion: 4`):
   - `componentId`, `intent`, `capabilities`, `synonyms`, `topics`
 
@@ -124,6 +129,12 @@ If v2 `primitiveLibrary` / `animationLibrary` are missing, backend derives them 
   - `motion` for `motion` / `motion/react` patterns
   - `framer-motion` for framer-motion patterns
   - otherwise `none`
+
+## Example canonicalization
+
+- Local sync (`bun run --cwd apps/backend sync:data`) materializes the canonical example file as `data/components/<id>/example.tsx`.
+- Upsert canonicalizes any provided `example.path` to `example.tsx` before writing to Convex.
+- If multiple `componentFiles(kind="example")` rows exist, validation currently warns and canonical selection uses lexicographically first `path`.
 
 ## Controlled vocabularies
 

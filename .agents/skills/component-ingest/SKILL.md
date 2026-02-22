@@ -57,6 +57,8 @@ Populate and maintain `data/components.csv` from a user-specified source while k
 - Ensure the chosen `code_file` naming aligns with importer directory resolution logic used in this repo.
 - Avoid collisions with existing component directories or entry filenames.
 - Usage examples are optional and not part of the CSV contract; if needed, represent them in `meta.json` as `example: { path, content }`.
+- Canonical example path convention is `example.tsx`; sync and upsert flows normalize to this path.
+- CSV import preserves existing `meta.json` non-CSV fields (including `example`) instead of dropping them.
 
 ## Annotation Rules
 

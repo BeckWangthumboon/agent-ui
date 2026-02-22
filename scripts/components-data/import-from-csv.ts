@@ -2,6 +2,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 type CsvRow = Record<string, string>;
+type UnknownRecord = Record<string, unknown>;
+type CodeFile = {
+  path: string;
+  content: string;
+};
 
 type CliOptions = {
   inputPath: string;
@@ -73,7 +78,20 @@ async function main(): Promise<void> {
       ...(readOptional(row, "source_license") ? { license: readOptional(row, "source_license") } : {}),
     };
 
-    const document = {
+    await mkdir(componentDirPath, { recursive: true });
+    const metaPath = join(componentDirPath, "meta.json");
+    const existingDocument = await readExistingMetaDocument(metaPath, componentId, warnings);
+    const existingCode = isRecord(existingDocument?.code) ? existingDocument.code : undefined;
+    const existingCodeFiles = readCodeFiles(existingCode?.files);
+    const mergedCodeFiles = mergeCodeFiles(codeFileName, codeContent, existingCodeFiles);
+    const preservedExample = readCodeFile(existingDocument?.example);
+    const preservedPrimitiveLibrary = readOptionalString(existingDocument?.primitiveLibrary);
+    const preservedAnimationLibrary = readOptionalString(existingDocument?.animationLibrary);
+    const preservedConstraints = isRecord(existingDocument?.constraints)
+      ? existingDocument.constraints
+      : undefined;
+
+    const document: UnknownRecord = {
       schemaVersion: 2,
       id: componentId,
       name: readRequired(row, "name"),
@@ -91,17 +109,23 @@ async function main(): Promise<void> {
       motionLevel: motion,
       code: {
         entryFile: codeFileName,
-        files: [
-          {
-            path: codeFileName,
-            content: codeContent,
-          },
-        ],
+        files: mergedCodeFiles,
       },
     };
 
-    await mkdir(componentDirPath, { recursive: true });
-    const metaPath = join(componentDirPath, "meta.json");
+    if (preservedPrimitiveLibrary) {
+      document.primitiveLibrary = preservedPrimitiveLibrary;
+    }
+    if (preservedAnimationLibrary) {
+      document.animationLibrary = preservedAnimationLibrary;
+    }
+    if (preservedConstraints) {
+      document.constraints = preservedConstraints;
+    }
+    if (preservedExample) {
+      document.example = preservedExample;
+    }
+
     await writeFile(metaPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
     written += 1;
   }
@@ -144,6 +168,93 @@ function splitPipe(value: string | undefined): string[] {
   return result;
 }
 
+async function readExistingMetaDocument(
+  metaPath: string,
+  componentId: string,
+  warnings: string[],
+): Promise<UnknownRecord | undefined> {
+  const file = Bun.file(metaPath);
+  if (!(await file.exists())) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = await file.json();
+  } catch (error) {
+    warnings.push(
+      `Continuing ${componentId}: existing meta is invalid JSON ${toDisplayPath(metaPath)} (${toErrorMessage(error)})`,
+    );
+    return undefined;
+  }
+
+  if (!isRecord(parsed)) {
+    warnings.push(`Continuing ${componentId}: existing meta is not an object ${toDisplayPath(metaPath)}`);
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function readCodeFiles(value: unknown): CodeFile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const files: CodeFile[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const entry of value) {
+    const file = readCodeFile(entry);
+    if (!file || seenPaths.has(file.path)) {
+      continue;
+    }
+
+    seenPaths.add(file.path);
+    files.push(file);
+  }
+
+  return files;
+}
+
+function mergeCodeFiles(entryPath: string, entryContent: string, existingFiles: CodeFile[]): CodeFile[] {
+  const merged: CodeFile[] = [{ path: entryPath, content: entryContent }];
+
+  for (const file of existingFiles) {
+    if (file.path === entryPath) {
+      continue;
+    }
+
+    merged.push(file);
+  }
+
+  return merged;
+}
+
+function readCodeFile(value: unknown): CodeFile | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const path = readOptionalString(value.path);
+  const content = typeof value.content === "string" ? value.content : undefined;
+
+  if (!path || !content || content.length === 0) {
+    return undefined;
+  }
+
+  return { path, content };
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function readRequired(row: CsvRow, key: string): string {
   const value = row[key]?.trim();
   if (!value) {
@@ -155,6 +266,18 @@ function readRequired(row: CsvRow, key: string): string {
 function readOptional(row: CsvRow, key: string): string | undefined {
   const value = row[key]?.trim();
   return value && value.length > 0 ? value : undefined;
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 function ensureHeaders(headers: string[]): void {

@@ -9,6 +9,7 @@ import type {
 } from "./types";
 
 const ID_HASH_LENGTH = 8;
+const CANONICAL_EXAMPLE_FILE_PATH = "example.tsx";
 
 function dependencyNames(component: Pick<ComponentDocument, "dependencies">): string[] {
   return component.dependencies.map((dependency) => dependency.name.toLowerCase());
@@ -131,11 +132,20 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
   }));
 
   if (component.example) {
+    const hasExamplePathCollision = component.code.files.some(
+      (file) => file.path === CANONICAL_EXAMPLE_FILE_PATH,
+    );
+    if (hasExamplePathCollision) {
+      throw new Error(
+        `Code file path '${CANONICAL_EXAMPLE_FILE_PATH}' is reserved for canonical examples`,
+      );
+    }
+
     files.push({
       schemaVersion: 5,
       componentId: id,
       kind: "example",
-      path: component.example.path,
+      path: CANONICAL_EXAMPLE_FILE_PATH,
       content: component.example.content,
     });
   }

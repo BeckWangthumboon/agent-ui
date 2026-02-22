@@ -331,7 +331,8 @@ function validateCrossTableIntegrity(
         level: "warning",
         table: "componentFiles",
         componentId,
-        message: "Multiple example files found; only one canonical example is expected",
+        message:
+          "Multiple example files found; canonical selection uses lexicographically first path and sync writes example.tsx",
       });
     }
   }

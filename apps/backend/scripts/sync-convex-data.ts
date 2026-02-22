@@ -29,6 +29,7 @@ type CliOptions = {
 };
 
 const DEFAULT_PAGE_SIZE = 200;
+const CANONICAL_EXAMPLE_FILE_PATH = "example.tsx";
 
 const exportTablePage = makeFunctionReference<"query">("admin:exportTablePage");
 
@@ -292,7 +293,7 @@ function toComponentDocument(
     ...(defaultExample
       ? {
           example: {
-            path: defaultExample.path,
+            path: CANONICAL_EXAMPLE_FILE_PATH,
             content: defaultExample.content,
           },
         }

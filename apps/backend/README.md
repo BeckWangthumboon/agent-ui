@@ -5,7 +5,7 @@ This workspace owns Convex schema and backend functions.
 ## Commands
 
 - `bun run --cwd apps/backend dev` - start Convex dev, generate local project wiring.
-- `bun run --cwd apps/backend sync:data` - overwrite `data/components/` with the latest Convex component documents and code files.
+- `bun run --cwd apps/backend sync:data` - overwrite `data/components/` with the latest Convex component documents and code files (canonical example file: `example.tsx`).
 - `bun run --cwd apps/backend validate:data` - validate Convex table rows and cross-table integrity.
 
 ## Migrations
@@ -25,7 +25,7 @@ When a future migration is added, run it with:
 - duplicate ids in each table
 - cross-table links (`components.id` must have matching `componentCode.componentId` and `componentSearch.componentId`)
 - code consistency (`entryFile` must reference a `componentFiles(kind="code")` row)
-- file consistency (`componentFiles.path` uniqueness per component, canonical single example warning)
+- file consistency (`componentFiles.path` uniqueness per component, canonical single example warning with lexicographic-first selection)
 
 Use `bun run --cwd apps/backend validate:data --json` for machine-readable output.
 
