@@ -36,6 +36,7 @@ Options:
 - `--styling <styling>`
 - `--motion <motion>` (repeatable)
 - `--primitive-library <library>` (repeatable)
+- `--relax`
 - `--json`
 
 Behavior:
@@ -46,8 +47,11 @@ Behavior:
 - Queries `api.search.componentsQuery`.
 - Sends all filters (including multi-value `motion` and `primitiveLibrary`) to the backend query.
 - Ranks candidates with Fuse.js.
+- Uses strict ranking by default.
+- `--relax` switches to relaxed ranking to show best-effort matches.
 - Hydrates metadata via `api.components.getMetadataByIds`.
 - Prints table-like text output or structured JSON.
+- On strict zero-hit, prints actionable recovery hints and notes that the component/topic may not exist in the current catalog.
 
 Failure cases:
 
@@ -99,6 +103,12 @@ Current supported config section:
   - `motion[]`
   - `primitiveLibrary[]`
   - `json`
+
+`search --json` fields include:
+
+- `mode`: `"strict"` or `"relaxed"`
+- `strictResultCount`: count from strict ranking before relaxed substitution
+- `relaxed`: boolean reflecting `--relax`
 
 Default config payload written on first `search` run when missing:
 

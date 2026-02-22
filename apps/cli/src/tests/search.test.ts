@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { parsePositiveInteger, runSearchCommand } from "../search";
+import { CLI_NAME } from "../constants";
 import {
   captureCommandOutput,
   createMockClient,
@@ -63,10 +64,76 @@ describe("runSearchCommand", () => {
 
     const payload = JSON.parse(output.logs[0] ?? "{}");
     expect(payload.query).toBe("button");
+    expect(payload.mode).toBe("strict");
+    expect(payload.relaxed).toBe(false);
+    expect(payload.strictResultCount).toBe(1);
     expect(payload.candidateCount).toBe(1);
     expect(payload.resultCount).toBe(1);
     expect(payload.filters.motion).toBeUndefined();
     expect(payload.filters.primitiveLibrary).toBeUndefined();
+    expect(payload.results[0].id).toBe("core-button");
+  });
+
+  it("prints strict miss guidance with catalog coverage hint", async () => {
+    const candidate = createSampleSearchCandidate();
+    const { client, calls } = createMockClient(async () => {
+      return [candidate];
+    });
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand("b", { limit: 10 }, client);
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(output.logs.join("\n")).toContain('No matches in current catalog for "b".');
+    expect(output.logs.join("\n")).toContain(`Try: ${CLI_NAME} search "b" --relax`);
+    expect(output.logs.join("\n")).toContain(
+      `Try: ${CLI_NAME} search "<broader term>" --limit 20`,
+    );
+    expect(output.logs.join("\n")).toContain("This component may not exist in the current catalog.");
+  });
+
+  it("shows relaxed best-effort results when --relax is enabled", async () => {
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    let callIndex = 0;
+    const { client, calls } = createMockClient(async () => {
+      callIndex += 1;
+      return callIndex === 1 ? [candidate] : [metadata];
+    });
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand("b", { limit: 10, relax: true }, client);
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(output.logs.join("\n")).toContain(
+      "No strict matches; showing relaxed best-effort results.",
+    );
+    expect(output.logs.join("\n")).toContain("1. Button (core-button)");
+    expect(output.logs.join("\n")).toContain(
+      "Tip: refine with --framework/--styling/--motion for higher precision.",
+    );
+  });
+
+  it("includes relaxed metadata in --json mode", async () => {
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    let callIndex = 0;
+    const { client } = createMockClient(async () => {
+      callIndex += 1;
+      return callIndex === 1 ? [candidate] : [metadata];
+    });
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand("b", { limit: 5, json: true, relax: true }, client);
+    });
+
+    const payload = JSON.parse(output.logs[0] ?? "{}");
+    expect(payload.mode).toBe("relaxed");
+    expect(payload.relaxed).toBe(true);
+    expect(payload.strictResultCount).toBe(0);
+    expect(payload.resultCount).toBe(1);
     expect(payload.results[0].id).toBe("core-button");
   });
 
@@ -152,6 +219,7 @@ describe("runSearchCommand", () => {
 
     const payload = JSON.parse(output.logs[0] ?? "{}");
     expect(payload.candidateCount).toBe(2);
+    expect(payload.strictResultCount).toBe(2);
     expect(payload.resultCount).toBe(2);
     expect(payload.results[0].id).toBe("core-button");
     expect(payload.filters.motion).toEqual(["none", "minimal"]);

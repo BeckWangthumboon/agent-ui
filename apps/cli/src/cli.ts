@@ -11,11 +11,12 @@ import {
 } from "./search.js";
 import { runViewCommand, type ViewCliOptions } from "./view.js";
 import { loadAgentUiConfig, mergeSearchOptions } from "./config.js";
+import { CLI_NAME } from "./constants.js";
 
 const program = new Command();
 
 program
-  .name("component-search")
+  .name(CLI_NAME)
   .description("Search component metadata via Convex + Fuse")
   .showHelpAfterError()
   .option("--config <path>", "Path to agent-ui config file");
@@ -33,6 +34,7 @@ program
     "Filter by primitive library (repeatable)",
     collectPrimitiveLibrary,
   )
+  .option("--relax", "Use relaxed ranking to show best-effort matches")
   .option("--json", "Output JSON")
   .action(async (query: string, options: SearchCliOptions, command: Command) => {
     const globalOptions = command.optsWithGlobals<{ config?: string }>();

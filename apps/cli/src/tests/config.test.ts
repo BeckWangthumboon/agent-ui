@@ -158,6 +158,7 @@ describe("mergeSearchOptions", () => {
       {
         limit: 3,
         motion: ["heavy"],
+        relax: true,
       },
       {
         schemaVersion: 1,
@@ -176,6 +177,7 @@ describe("mergeSearchOptions", () => {
     expect(merged.framework).toBe("react");
     expect(merged.motion).toEqual(["heavy"]);
     expect(merged.primitiveLibrary).toEqual(["radix"]);
+    expect(merged.relax).toBe(true);
     expect(merged.json).toBe(true);
   });
 });
