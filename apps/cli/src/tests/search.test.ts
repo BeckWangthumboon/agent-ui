@@ -87,10 +87,10 @@ describe("runSearchCommand", () => {
     expect(calls).toHaveLength(1);
     expect(output.logs.join("\n")).toContain('No matches in current catalog for "b".');
     expect(output.logs.join("\n")).toContain(`Try: ${CLI_NAME} search "b" --relax`);
+    expect(output.logs.join("\n")).toContain(`Try: ${CLI_NAME} search "<broader term>" --limit 20`);
     expect(output.logs.join("\n")).toContain(
-      `Try: ${CLI_NAME} search "<broader term>" --limit 20`,
+      "This component may not exist in the current catalog.",
     );
-    expect(output.logs.join("\n")).toContain("This component may not exist in the current catalog.");
   });
 
   it("shows relaxed best-effort results when --relax is enabled", async () => {
