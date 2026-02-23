@@ -1,69 +1,62 @@
 # Component Metadata Guide
 
-This project currently uses two related shapes:
+This project uses two related shapes:
 
-- Local annotation/source shape: `data/components/<id>/meta.json` (`schemaVersion: 2`)
-- Backend/storage shape: split Convex tables (`schemaVersion: 4/5`)
+- Local source shape: `data/components/<id>/meta.json` (`schemaVersion: 2`)
+- Backend storage shape: split Convex tables (`schemaVersion: 4/5`)
 
-`data/components.csv` is a bulk editing surface that imports into local `meta.json` files.
+## Current data flow (Convex-first + changesets)
 
-## Current data flow
-
-1. Edit `data/components.csv`.
-2. Run `bun run data:import-csv` (alias: `bun run import:csv`) to update `data/components/<id>/meta.json`.
-3. Backend upsert (`apps/backend/convex/admin.ts`) accepts the v2 document and splits it into:
-   - `components` (metadata)
-   - `componentCode` (code manifest: `entryFile`)
-   - `componentFiles` (one row per code/example file)
-   - `componentSearch` (search text fields)
-4. Optional live Convex integrity check:
+1. Edit local component docs in `data/components/<id>/meta.json`.
+2. Create a changeset:
+   - `bun run data:changeset:create`
+3. Validate the changeset:
+   - `bun run data:changeset:validate -- --changeset data/changesets/<id>.json`
+4. Diff against live Convex data:
+   - `bun run data:changeset:diff -- --changeset data/changesets/<id>.json`
+5. Publish to Convex:
+   - `bun run data:changeset:publish -- --changeset data/changesets/<id>.json`
+6. Optional live integrity/sync scripts:
    - `bun run --cwd apps/backend validate:data`
-5. Optional reverse sync from Convex back to local `data/components/`:
    - `bun run --cwd apps/backend sync:data`
 
 ## Source of truth
 
-- For local editing/import: `data/components/<id>/meta.json` is canonical.
-- For live backend behavior: Convex tables (`components`, `componentCode`, `componentFiles`, `componentSearch`) are canonical.
+- Live Convex data (`components`, `componentCode`, `componentFiles`, `componentSearch`) is the runtime source of truth.
+- Local `data/components/` files are an editable source that can be materialized into a changeset.
 
-## CSV contract (import-from-csv)
+## Changeset format (`data/changesets/*.json`)
 
-Required headers:
+One file per publish run. Example:
 
-- `id`
-- `name`
-- `framework`
-- `styling`
-- `intent`
-- `capabilities`
-- `synonyms`
-- `topics`
-- `dependencies`
-- `motion`
-- `source_url`
-- `source_repo`
-- `source_author`
-- `source_license`
-- `code_file`
-
-Optional header:
-
-- `source_library`
-
-Allowed values enforced by importer:
-
-- `motion`: `none | minimal | standard | heavy`
+```json
+{
+  "schemaVersion": 1,
+  "id": "20260223T204501Z",
+  "createdAt": "2026-02-23T20:45:01.000Z",
+  "source": "agent",
+  "operations": [
+    {
+      "type": "upsert",
+      "component": {
+        "schemaVersion": 2,
+        "id": "button-shadcn-3fb3fb60",
+        "...": "..."
+      }
+    },
+    {
+      "type": "delete",
+      "componentId": "button-shadcn-4f67a1b2"
+    }
+  ]
+}
+```
 
 Notes:
 
-- `capabilities`, `synonyms`, `topics`, `dependencies` are `|`-delimited, trimmed, and deduplicated case-insensitively.
-- `dependencies` become objects with `kind: "runtime"` in v2 `meta.json`.
-- `code_file` must exist at `data/components/<id>/<code_file>` and must be non-empty.
-- Import preserves non-CSV fields from existing `meta.json` when present (`example`, `constraints`, `primitiveLibrary`, `animationLibrary`, and extra `code.files` entries).
-- Import updates `code.entryFile` from `code_file` and refreshes that file's content from disk.
-- CSV import does not populate `example`; add/edit that directly in `meta.json` when needed.
-- Canonical local example filename is `example.tsx` when generated from Convex sync.
-- `example.tsx` is reserved for canonical examples; do not use it as a code file path in `code.files`.
+- `upsert.component` must be a valid v2 component document.
+- `delete.componentId` is the public Convex component id (`components.id`), not the local source id.
+- Validation blocks duplicate/conflicting operations for the same public component id.
 
 ## v2 local document fields (`meta.json`)
 
@@ -108,7 +101,7 @@ When a v2 document is upserted, backend derives:
 
 ### Important: ID behavior
 
-- CSV/local `meta.json` `id` is an input identifier.
+- Local `meta.json` `id` is an input identifier.
 - Backend generates a public component id via `buildPublicComponentId(...)` and stores that in v4 tables.
 - Generated id is based on name/library slug plus a hash fingerprint of:
   - local `id`

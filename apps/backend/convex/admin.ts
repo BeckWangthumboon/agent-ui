@@ -4,7 +4,11 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 import { buildSplitComponentRecords } from "../../../shared/component-schema";
-import { ComponentCodeFileValidator, ComponentDocumentValidator, ComponentInstallValidator } from "./validators";
+import {
+  ComponentCodeFileValidator,
+  ComponentDocumentValidator,
+  ComponentInstallValidator,
+} from "./validators";
 
 type ComponentSearchRecord = Doc<"componentSearch">;
 type ComponentFileRecord = Doc<"componentFiles">;
@@ -31,6 +35,13 @@ async function findFilesByComponentId(
     .query("componentFiles")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .collect();
+}
+
+async function findCodeByComponentId(ctx: MutationCtx, componentId: string) {
+  return ctx.db
+    .query("componentCode")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .unique();
 }
 
 async function findMetadataByComponentId(ctx: MutationCtx, componentId: string) {
@@ -106,7 +117,11 @@ export const patchInstallExample = mutation({
     }
 
     if (shouldSetInstall || shouldClearInstall) {
-      const { _id: _metadataId, _creationTime: _metadataCreationTime, ...metadataFields } = metadata;
+      const {
+        _id: _metadataId,
+        _creationTime: _metadataCreationTime,
+        ...metadataFields
+      } = metadata;
       void _metadataId;
       void _metadataCreationTime;
 
@@ -241,6 +256,57 @@ export const upsert = mutation({
     return {
       status: "inserted",
       componentId: records.metadata.id,
+    };
+  },
+});
+
+export const deleteComponentById = mutation({
+  args: {
+    componentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const componentId = args.componentId.trim();
+    if (componentId.length === 0) {
+      throw new Error("componentId must be non-empty");
+    }
+
+    const [metadata, code, files, search] = await Promise.all([
+      findMetadataByComponentId(ctx, componentId),
+      findCodeByComponentId(ctx, componentId),
+      findFilesByComponentId(ctx, componentId),
+      findSearchByComponentId(ctx, componentId),
+    ]);
+
+    if (metadata) {
+      await ctx.db.delete(metadata._id);
+    }
+    if (code) {
+      await ctx.db.delete(code._id);
+    }
+    for (const file of files) {
+      await ctx.db.delete(file._id);
+    }
+    if (search) {
+      await ctx.db.delete(search._id);
+    }
+
+    const deletedCounts = {
+      components: metadata ? 1 : 0,
+      componentCode: code ? 1 : 0,
+      componentFiles: files.length,
+      componentSearch: search ? 1 : 0,
+    };
+    const totalDeleted =
+      deletedCounts.components +
+      deletedCounts.componentCode +
+      deletedCounts.componentFiles +
+      deletedCounts.componentSearch;
+
+    return {
+      status: totalDeleted > 0 ? "deleted" : "not_found",
+      componentId,
+      deleted: deletedCounts,
+      totalDeleted,
     };
   },
 });

@@ -40,10 +40,10 @@
     "format:check:web:quiet": "bunx prettier apps/web --check --log-level silent",
     "format:check:cli": "bunx prettier apps/cli --check",
     "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
-    "data:export-csv": "bun run scripts/components-data/export-to-csv.ts",
-    "data:import-csv": "bun run scripts/components-data/import-from-csv.ts",
-    "export:csv": "bun run data:export-csv",
-    "import:csv": "bun run data:import-csv"
+    "data:changeset:create": "bun run scripts/changesets/create-from-local.ts",
+    "data:changeset:validate": "bun run scripts/changesets/validate.ts",
+    "data:changeset:diff": "bun run scripts/changesets/diff.ts",
+    "data:changeset:publish": "bun run scripts/changesets/publish.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
