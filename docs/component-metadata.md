@@ -18,7 +18,7 @@ This project uses two related shapes:
    - `bun run data:changeset:publish -- --changeset data/changesets/<id>.json`
 6. Optional live integrity/sync scripts:
    - `bun run --cwd apps/backend validate:data`
-   - `bun run --cwd apps/backend sync:data`
+   - `bun run data:pull`
 
 ## Source of truth
 
@@ -125,7 +125,7 @@ If v2 `primitiveLibrary` / `animationLibrary` are missing, backend derives them 
 
 ## Example canonicalization
 
-- Local sync (`bun run --cwd apps/backend sync:data`) materializes the canonical example file as `data/components/<id>/example.tsx`.
+- Local pull (`bun run data:pull`) materializes the canonical example file as `data/components/<id>/example.tsx`.
 - Upsert canonicalizes any provided `example.path` to `example.tsx` before writing to Convex.
 - If multiple `componentFiles(kind="example")` rows exist, validation currently warns and canonical selection uses lexicographically first `path`.
 

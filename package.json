@@ -40,6 +40,7 @@
     "format:check:web:quiet": "bunx prettier apps/web --check --log-level silent",
     "format:check:cli": "bunx prettier apps/cli --check",
     "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
+    "data:pull": "bun run --cwd apps/backend pull",
     "data:changeset:create": "bun run scripts/changesets/create-from-local.ts",
     "data:changeset:validate": "bun run scripts/changesets/validate.ts",
     "data:changeset:diff": "bun run scripts/changesets/diff.ts",

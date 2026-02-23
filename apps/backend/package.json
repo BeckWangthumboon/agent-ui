@@ -6,7 +6,7 @@
     "dev": "bunx convex dev",
     "generate": "bunx convex dev --once",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "sync:data": "bun run scripts/sync-convex-data.ts",
+    "pull": "bun run scripts/sync-convex-data.ts",
     "validate:data": "bun run scripts/validate-convex-data.ts",
     "report:missing-install": "bun run scripts/report-missing-install.ts",
     "patch:component-fields": "bun run scripts/patch-component-fields.ts"

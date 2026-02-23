@@ -9,7 +9,7 @@ This workspace owns Convex schema and backend functions.
 - `bun run data:changeset:validate -- --changeset <path>` - validate changeset schema and operation conflicts.
 - `bun run data:changeset:diff -- --changeset <path>` - compare a changeset against live Convex rows.
 - `bun run data:changeset:publish -- --changeset <path> [--dry-run]` - apply a changeset to live Convex (`upsert` + `delete`).
-- `bun run --cwd apps/backend sync:data` - overwrite `data/components/` with the latest Convex component documents and code files (canonical example file: `example.tsx`).
+- `bun run data:pull` - overwrite `data/components/` with the latest Convex component documents and code files (canonical example file: `example.tsx`).
 - `bun run --cwd apps/backend validate:data` - validate Convex table rows and cross-table integrity.
 - `bun run --cwd apps/backend report:missing-install` - list components that still do not have `install` metadata.
 
