@@ -3,12 +3,15 @@ import type { ConvexHttpClient } from "convex/browser";
 import { api } from "../../backend/convex/_generated/api";
 import type { ComponentInstall } from "../../../shared/component-schema";
 import type { PackageManager } from "./config.js";
+import { CLI_NAME } from "./constants.js";
 
 const DEFAULT_PACKAGE_MANAGER: PackageManager = "npx";
 
 export type AddCliOptions = {
   packageManager?: PackageManager;
   json?: boolean;
+  yes?: boolean;
+  dryRun?: boolean;
 };
 
 type InstallRenderResult = {
@@ -16,11 +19,39 @@ type InstallRenderResult = {
   steps: string[];
 };
 
+export type ExecutionResult = {
+  success: boolean;
+  exitCode: number;
+  error?: string;
+};
+
+function assertExecutionResult(value: unknown): asserts value is ExecutionResult {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Invalid ExecutionResult: expected object");
+  }
+  const result = value as Record<string, unknown>;
+  if (typeof result.success !== "boolean") {
+    throw new Error("Invalid ExecutionResult: success must be boolean");
+  }
+  if (typeof result.exitCode !== "number") {
+    throw new Error("Invalid ExecutionResult: exitCode must be number");
+  }
+  if (result.error !== undefined && typeof result.error !== "string") {
+    throw new Error("Invalid ExecutionResult: error must be string or undefined");
+  }
+}
+
+export type CommandExecutor = (command: string) => Promise<ExecutionResult>;
+
+type RunAddCommandOptions = AddCliOptions & {
+  executor?: CommandExecutor;
+};
+
 export async function runAddCommand(
   id: string,
-  options: AddCliOptions,
+  options: RunAddCommandOptions,
   client: ConvexHttpClient,
-): Promise<void> {
+) {
   const normalizedId = id.trim();
 
   if (normalizedId.length === 0) {
@@ -41,35 +72,55 @@ export async function runAddCommand(
 
   if (!component.install) {
     console.error(`Install instructions are unavailable for ${component.id}.`);
-    console.error("Try: component-search view <id> --code and apply changes manually.");
+    console.error(`Try: ${CLI_NAME} view <id> --code and apply changes manually.`);
     process.exitCode = 1;
     return;
   }
 
   const packageManager = options.packageManager ?? DEFAULT_PACKAGE_MANAGER;
   const rendered = renderInstall(component.install, packageManager);
+  const shouldExecute = options.yes && !options.dryRun && rendered.command;
+  const executor = options.executor ?? spawnCommand;
 
   if (options.json) {
-    console.log(
-      JSON.stringify(
-        {
-          id: component.id,
-          name: component.name,
-          packageManager,
-          mode: component.install.mode,
-          source: component.install.source,
-          renderedCommand: rendered.command,
-          steps: rendered.steps,
-          install: component.install,
-        },
-        null,
-        2,
-      ),
+    outputJson(
+      component.id,
+      component.name,
+      packageManager,
+      component.install,
+      rendered,
+      !!shouldExecute,
     );
     return;
   }
 
   console.log(`${component.name} (${component.id})`);
+
+  if (shouldExecute && rendered.command) {
+    console.log(`Running: ${rendered.command}`);
+    const result = await executor(rendered.command);
+    assertExecutionResult(result);
+
+    if (!result.success) {
+      console.error(`Command failed with exit code ${result.exitCode}`);
+      if (result.error) {
+        console.error(result.error);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log("Done.");
+
+    if (rendered.steps.length > 0) {
+      console.log("Remaining manual steps:");
+      for (const [index, step] of rendered.steps.entries()) {
+        console.log(`${index + 1}. ${step}`);
+      }
+    }
+    return;
+  }
+
   console.log(`install.mode: ${component.install.mode}`);
   console.log(`install.source: ${component.install.source}`);
 
@@ -85,10 +136,64 @@ export async function runAddCommand(
   }
 }
 
-function renderInstall(
-  install: ComponentInstall,
+function outputJson(
+  id: string,
+  name: string,
   packageManager: PackageManager,
-): InstallRenderResult {
+  install: ComponentInstall,
+  rendered: InstallRenderResult,
+  willExecute: boolean,
+) {
+  console.log(
+    JSON.stringify(
+      {
+        id,
+        name,
+        packageManager,
+        mode: install.mode,
+        source: install.source,
+        renderedCommand: rendered.command,
+        steps: rendered.steps,
+        willExecute,
+        install,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function spawnCommand(command: string): Promise<ExecutionResult> {
+  if (!command.trim()) {
+    return { success: false, exitCode: 1, error: "Empty command" };
+  }
+
+  try {
+    const subprocess = Bun.spawn(["sh", "-c", command], {
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const exitCode = await subprocess.exited;
+
+    if (exitCode === 0) {
+      return { success: true, exitCode };
+    }
+
+    return {
+      success: false,
+      exitCode,
+      error: `Command exited with code ${exitCode}: ${command}`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      exitCode: 1,
+      error: `Failed to start command: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function renderInstall(install: ComponentInstall, packageManager: PackageManager) {
   if (install.mode === "command") {
     return {
       command: toRunnerCommand(install.template, packageManager),
@@ -109,7 +214,7 @@ function renderInstall(
   };
 }
 
-function toRunnerCommand(template: string, packageManager: PackageManager): string {
+function toRunnerCommand(template: string, packageManager: PackageManager) {
   const normalizedTemplate = template.trim();
 
   if (packageManager === "npx") {

@@ -138,6 +138,8 @@ export function mergeSearchOptions(
 type AddOptions = {
   packageManager?: PackageManager;
   json?: boolean;
+  yes?: boolean;
+  dryRun?: boolean;
 };
 
 export function parsePackageManager(rawValue: string): PackageManager {
@@ -155,5 +157,7 @@ export function mergeAddOptions(cliOptions: AddOptions, config: AgentUiConfig | 
   return {
     packageManager: cliOptions.packageManager ?? addDefaults?.packageManager,
     json: cliOptions.json,
+    yes: cliOptions.yes,
+    dryRun: cliOptions.dryRun,
   };
 }

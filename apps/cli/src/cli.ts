@@ -86,10 +86,12 @@ program
 
 program
   .command("add")
-  .description("Print install command and manual steps for a component id")
+  .description("Install a component by id")
   .argument("<id>", "Component id (required)")
   .option("--package-manager <manager>", "Package manager: npx|bunx|pnpm|yarn", parsePackageManager)
   .option("--json", "Output JSON")
+  .option("--yes", "Execute install command non-interactively")
+  .option("--dry-run", "Print planned changes without executing")
   .action(async (id: string, options: AddCliOptions, command: Command) => {
     const globalOptions = command.optsWithGlobals<{ config?: string }>();
     let loadedConfig = null;
