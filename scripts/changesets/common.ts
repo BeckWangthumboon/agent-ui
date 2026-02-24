@@ -68,17 +68,25 @@ export type ParsedChangeset = {
 
 export type SnapshotTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
 
+export type SnapshotParseIssue = {
+  table: SnapshotTable;
+  rowIndex: number;
+  message: string;
+  rowId?: string;
+};
+
 type PaginationResult<TDocument> = {
   page: TDocument[];
   isDone: boolean;
   continueCursor: string;
 };
 
-type LiveSnapshot = {
+export type LiveSnapshot = {
   metadataById: Map<string, ComponentMetadataDocument>;
   codeById: Map<string, ComponentCodeDocument>;
   filesById: Map<string, ComponentFileDocument[]>;
   searchById: Map<string, ComponentSearchDocument>;
+  parseIssues: SnapshotParseIssue[];
 };
 
 const DEFAULT_PAGE_SIZE = 200;
@@ -106,8 +114,7 @@ export const ChangesetDocumentSchema: z.ZodType<ChangesetDocument> = z.strictObj
 
 const exportTablePage = makeFunctionReference<"query">("admin:exportTablePage");
 
-export const upsertComponent = makeFunctionReference<"mutation">("admin:upsert");
-export const deleteComponentById = makeFunctionReference<"mutation">("admin:deleteComponentById");
+export const applyChangeset = makeFunctionReference<"mutation">("admin:applyChangeset");
 
 export function nowTimestampId(date = new Date()): string {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -285,30 +292,42 @@ export async function fetchLiveSnapshot(client: ConvexHttpClient): Promise<LiveS
   const rawCode = await fetchAllDocuments(client, "componentCode");
   const rawFiles = await fetchAllDocuments(client, "componentFiles");
   const rawSearch = await fetchAllDocuments(client, "componentSearch");
+  const parseIssues: SnapshotParseIssue[] = [];
 
   const metadataById = new Map<string, ComponentMetadataDocument>();
-  for (const row of rawMetadata) {
+  for (const [index, row] of rawMetadata.entries()) {
     const normalized = stripConvexSystemFields(row);
     const parsed = ComponentMetadataDocumentSchema.safeParse(normalized);
     if (parsed.success) {
       metadataById.set(parsed.data.id, parsed.data);
+    } else {
+      parseIssues.push(
+        buildSnapshotParseIssue("components", index, normalized, parsed.error.issues[0]),
+      );
     }
   }
 
   const codeById = new Map<string, ComponentCodeDocument>();
-  for (const row of rawCode) {
+  for (const [index, row] of rawCode.entries()) {
     const normalized = stripConvexSystemFields(row);
     const parsed = ComponentCodeDocumentSchema.safeParse(normalized);
     if (parsed.success) {
       codeById.set(parsed.data.componentId, parsed.data);
+    } else {
+      parseIssues.push(
+        buildSnapshotParseIssue("componentCode", index, normalized, parsed.error.issues[0]),
+      );
     }
   }
 
   const filesById = new Map<string, ComponentFileDocument[]>();
-  for (const row of rawFiles) {
+  for (const [index, row] of rawFiles.entries()) {
     const normalized = stripConvexSystemFields(row);
     const parsed = ComponentFileDocumentSchema.safeParse(normalized);
     if (!parsed.success) {
+      parseIssues.push(
+        buildSnapshotParseIssue("componentFiles", index, normalized, parsed.error.issues[0]),
+      );
       continue;
     }
 
@@ -321,11 +340,15 @@ export async function fetchLiveSnapshot(client: ConvexHttpClient): Promise<LiveS
   }
 
   const searchById = new Map<string, ComponentSearchDocument>();
-  for (const row of rawSearch) {
+  for (const [index, row] of rawSearch.entries()) {
     const normalized = stripConvexSystemFields(row);
     const parsed = ComponentSearchDocumentSchema.safeParse(normalized);
     if (parsed.success) {
       searchById.set(parsed.data.componentId, parsed.data);
+    } else {
+      parseIssues.push(
+        buildSnapshotParseIssue("componentSearch", index, normalized, parsed.error.issues[0]),
+      );
     }
   }
 
@@ -334,6 +357,7 @@ export async function fetchLiveSnapshot(client: ConvexHttpClient): Promise<LiveS
     codeById,
     filesById,
     searchById,
+    parseIssues,
   };
 }
 
@@ -494,6 +518,13 @@ export function hasValidationErrors(issues: ValidationIssue[]): boolean {
   return issues.some((issue) => issue.level === "error");
 }
 
+export function formatSnapshotIssues(issues: SnapshotParseIssue[]): string[] {
+  return issues.map((issue) => {
+    const row = issue.rowId ? ` row=${issue.rowId}` : "";
+    return `${issue.table}[${issue.rowIndex}]${row}: ${issue.message}`;
+  });
+}
+
 async function fetchAllDocuments(client: ConvexHttpClient, table: SnapshotTable): Promise<unknown[]> {
   const rows: unknown[] = [];
   let cursor: string | undefined;
@@ -584,6 +615,34 @@ function diffComponentFiles(currentFiles: ComponentFileDocument[], nextFiles: Co
 
 function stableJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function buildSnapshotParseIssue(
+  table: SnapshotTable,
+  rowIndex: number,
+  row: unknown,
+  issue: z.ZodIssue | undefined,
+): SnapshotParseIssue {
+  const rowId = extractRowId(row);
+  return {
+    table,
+    rowIndex,
+    rowId,
+    message: issue ? formatZodIssue(issue.path, issue.message) : "Unknown schema error",
+  };
+}
+
+function extractRowId(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const candidate = value.id ?? value.componentId;
+  if (typeof candidate === "string" && candidate.trim().length > 0) {
+    return candidate;
+  }
+
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

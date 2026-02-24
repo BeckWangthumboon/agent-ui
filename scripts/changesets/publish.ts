@@ -3,16 +3,12 @@ import { resolve } from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 
 import {
-  deleteComponentById,
-  diffChangesetAgainstSnapshot,
-  fetchLiveSnapshot,
+  applyChangeset as applyChangesetMutation,
   formatValidationIssues,
   hasValidationErrors,
   parseAndValidateChangeset,
-  printDiffSummary,
   resolveChangesetPath,
   toDisplayPath,
-  upsertComponent,
   type ValidationIssue,
 } from "./common";
 
@@ -28,8 +24,10 @@ type PublishResult = {
   dryRun: boolean;
   convexUrl: string;
   validationIssues: ValidationIssue[];
-  diff: Awaited<ReturnType<typeof diffChangesetAgainstSnapshot>>;
-  applied: Array<{ type: "upsert" | "delete"; componentId: string; result: unknown }>;
+  operationCount: number;
+  upsertCount: number;
+  deleteCount: number;
+  appliedResult: unknown | null;
 };
 
 async function main(): Promise<void> {
@@ -48,23 +46,17 @@ async function main(): Promise<void> {
     throw new Error(`Changeset validation failed: ${firstError?.message ?? "unknown error"}`);
   }
 
+  const upsertCount = parsed.resolvedOperations.filter((operation) => operation.type === "upsert").length;
+  const deleteCount = parsed.resolvedOperations.length - upsertCount;
+
   const client = new ConvexHttpClient(convexUrl);
-  const snapshot = await fetchLiveSnapshot(client);
-  const diff = await diffChangesetAgainstSnapshot(parsed.resolvedOperations, snapshot);
-  const applied: PublishResult["applied"] = [];
+  let appliedResult: unknown | null = null;
 
   if (!options.dryRun) {
-    for (const operation of parsed.resolvedOperations) {
-      if (operation.type === "upsert") {
-        const result = await client.mutation(upsertComponent, { component: operation.component });
-        applied.push({ type: "upsert", componentId: operation.componentId, result });
-      } else {
-        const result = await client.mutation(deleteComponentById, {
-          componentId: operation.componentId,
-        });
-        applied.push({ type: "delete", componentId: operation.componentId, result });
-      }
-    }
+    appliedResult = await client.mutation(applyChangesetMutation, {
+      changesetId: parsed.changeset.id,
+      operations: parsed.changeset.operations,
+    });
   }
 
   const output: PublishResult = {
@@ -73,8 +65,10 @@ async function main(): Promise<void> {
     dryRun: options.dryRun,
     convexUrl,
     validationIssues: parsed.issues,
-    diff,
-    applied,
+    operationCount: parsed.resolvedOperations.length,
+    upsertCount,
+    deleteCount,
+    appliedResult,
   };
 
   if (options.json) {
@@ -90,10 +84,20 @@ async function main(): Promise<void> {
       console.log(line);
     }
   }
-  printDiffSummary(diff);
+  console.log(`Operations: ${output.operationCount}`);
+  console.log(`Upserts: ${output.upsertCount}`);
+  console.log(`Deletes: ${output.deleteCount}`);
 
-  if (!options.dryRun) {
-    console.log(`Applied operations: ${applied.length}`);
+  if (options.dryRun) {
+    console.log("No mutations applied (--dry-run).");
+  } else {
+    const appliedCount =
+      typeof output.appliedResult === "object" &&
+      output.appliedResult !== null &&
+      "operationCount" in output.appliedResult
+        ? Number((output.appliedResult as { operationCount?: number }).operationCount ?? output.operationCount)
+        : output.operationCount;
+    console.log(`Applied operations: ${appliedCount}`);
   }
 }
 
@@ -144,7 +148,7 @@ function printHelp(): void {
   console.log("");
   console.log("Options:");
   console.log("  --changeset <path>   Changeset file path (default: latest in data/changesets)");
-  console.log("  --dry-run            Validate and diff but do not apply mutations");
+  console.log("  --dry-run            Validate only; do not apply mutations");
   console.log("  --json               Output machine-readable JSON");
 }
 

@@ -10,8 +10,8 @@
     "dev:web": "bun run --cwd apps/web dev",
     "build:web": "bun run --cwd apps/web build",
     "dev:cli": "bun run --cwd apps/cli dev",
-    "dev:backend": "bun run --cwd apps/backend dev",
-    "generate:backend": "bun run --cwd apps/backend generate",
+    "dev:backend": "bun run --env-file apps/backend/.env.local --cwd apps/backend dev",
+    "generate:backend": "bun run --env-file apps/backend/.env.local --cwd apps/backend generate",
     "cli": "bun run --cwd apps/cli dev",
     "check": "bun run typecheck && bun run lint && bun run format",
     "check:web": "bun run typecheck:web && bun run lint:web && bun run format:web",
@@ -40,11 +40,11 @@
     "format:check:web:quiet": "bunx prettier apps/web --check --log-level silent",
     "format:check:cli": "bunx prettier apps/cli --check",
     "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
-    "data:pull": "bun run --cwd apps/backend pull",
-    "data:changeset:create": "bun run scripts/changesets/create-from-local.ts",
-    "data:changeset:validate": "bun run scripts/changesets/validate.ts",
-    "data:changeset:diff": "bun run scripts/changesets/diff.ts",
-    "data:changeset:publish": "bun run scripts/changesets/publish.ts"
+    "data:pull": "bun run --env-file apps/backend/.env.local --cwd apps/backend pull",
+    "data:create": "bun run --env-file apps/backend/.env.local scripts/changesets/create-from-local.ts",
+    "data:validate": "bun run --env-file apps/backend/.env.local scripts/changesets/validate.ts",
+    "data:diff": "bun run --env-file apps/backend/.env.local scripts/changesets/diff.ts",
+    "data:publish": "bun run --env-file apps/backend/.env.local scripts/changesets/publish.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

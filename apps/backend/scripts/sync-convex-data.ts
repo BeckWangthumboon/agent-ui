@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     written += 1;
   }
 
-  console.log(`Convex source: ${convexUrl}`);
+  console.log(`Convex source: ${describeConvexSource(convexUrl)}`);
   console.log(
     `Rows fetched: components=${rawMetadata.length}, componentCode=${rawCode.length}, componentFiles=${rawFiles.length}, componentSearch=${rawSearch.length}`,
   );
@@ -364,6 +364,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function toDisplayPath(path: string): string {
   const relativePath = relative(process.cwd(), path);
   return relativePath.startsWith("..") ? path : relativePath;
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 await main();

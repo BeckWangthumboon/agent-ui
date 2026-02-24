@@ -10,6 +10,7 @@ import type {
 
 const ID_HASH_LENGTH = 8;
 const CANONICAL_EXAMPLE_FILE_PATH = "example.tsx";
+const PUBLIC_ID_SUFFIX_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*-[a-f0-9]{8}$/;
 
 function dependencyNames(component: Pick<ComponentDocument, "dependencies">): string[] {
   return component.dependencies.map((dependency) => dependency.name.toLowerCase());
@@ -88,6 +89,16 @@ async function sha256Hex(value: string): Promise<string> {
 export async function buildPublicComponentId(component: ComponentDocument): Promise<string> {
   const sourceLibrary = component.source.library?.trim();
   const slug = toIdSlug(`${component.name}-${sourceLibrary ?? "component"}`);
+  const candidateId = component.id.trim();
+
+  if (
+    candidateId.length > 0 &&
+    candidateId.startsWith(`${slug}-`) &&
+    PUBLIC_ID_SUFFIX_PATTERN.test(candidateId)
+  ) {
+    return candidateId;
+  }
+
   const fingerprint = `${component.id}|${component.source.url}|${component.framework}|${component.styling}`;
   const hash = await sha256Hex(fingerprint);
   return `${slug}-${hash.slice(0, ID_HASH_LENGTH)}`;

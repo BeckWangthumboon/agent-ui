@@ -3,7 +3,11 @@ import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
-import { buildSplitComponentRecords } from "../../../shared/component-schema";
+import {
+  buildPublicComponentId,
+  buildSplitComponentRecords,
+  type ComponentDocument,
+} from "../../../shared/component-schema";
 import {
   ComponentCodeFileValidator,
   ComponentDocumentValidator,
@@ -13,6 +17,18 @@ import {
 type ComponentSearchRecord = Doc<"componentSearch">;
 type ComponentFileRecord = Doc<"componentFiles">;
 type ExportableTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
+type SplitComponentRecords = Awaited<ReturnType<typeof buildSplitComponentRecords>>;
+type DeleteComponentResult = {
+  status: "deleted" | "not_found";
+  componentId: string;
+  deleted: {
+    components: number;
+    componentCode: number;
+    componentFiles: number;
+    componentSearch: number;
+  };
+  totalDeleted: number;
+};
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -58,6 +74,119 @@ async function findExampleFilesByComponentId(ctx: MutationCtx, componentId: stri
       indexQuery.eq("componentId", componentId).eq("kind", "example"),
     )
     .collect();
+}
+
+async function upsertSplitRecords(
+  ctx: MutationCtx,
+  records: SplitComponentRecords,
+): Promise<{ status: "inserted" | "updated"; componentId: string }> {
+  const [existingMetadata, existingCode, existingFiles, existingSearch] = await Promise.all([
+    findMetadataByComponentId(ctx, records.metadata.id),
+    findCodeByComponentId(ctx, records.code.componentId),
+    findFilesByComponentId(ctx, records.code.componentId),
+    findSearchByComponentId(ctx, records.search.componentId),
+  ]);
+
+  const hadExistingRows =
+    existingMetadata !== null ||
+    existingCode !== null ||
+    existingSearch !== null ||
+    existingFiles.length > 0;
+
+  if (existingMetadata) {
+    await ctx.db.replace(existingMetadata._id, records.metadata);
+  } else {
+    await ctx.db.insert("components", records.metadata);
+  }
+
+  if (existingCode) {
+    await ctx.db.replace(existingCode._id, records.code);
+  } else {
+    await ctx.db.insert("componentCode", records.code);
+  }
+
+  const existingFileByPath = new Map(existingFiles.map((row) => [row.path, row]));
+  const nextFileByPath = new Map(records.files.map((row) => [row.path, row]));
+  const visitedPaths = new Set<string>();
+
+  for (const existingFile of existingFiles) {
+    if (visitedPaths.has(existingFile.path)) {
+      await ctx.db.delete(existingFile._id);
+      continue;
+    }
+    visitedPaths.add(existingFile.path);
+
+    const nextFile = nextFileByPath.get(existingFile.path);
+    if (!nextFile) {
+      await ctx.db.delete(existingFile._id);
+      continue;
+    }
+
+    await ctx.db.replace(existingFile._id, nextFile);
+  }
+
+  for (const nextFile of records.files) {
+    if (existingFileByPath.has(nextFile.path)) {
+      continue;
+    }
+
+    await ctx.db.insert("componentFiles", nextFile);
+  }
+
+  if (existingSearch) {
+    await ctx.db.replace(existingSearch._id, records.search);
+  } else {
+    await ctx.db.insert("componentSearch", records.search);
+  }
+
+  return {
+    status: hadExistingRows ? "updated" : "inserted",
+    componentId: records.metadata.id,
+  };
+}
+
+async function deleteComponentRowsById(
+  ctx: MutationCtx,
+  componentId: string,
+): Promise<DeleteComponentResult> {
+  const [metadata, code, files, search] = await Promise.all([
+    findMetadataByComponentId(ctx, componentId),
+    findCodeByComponentId(ctx, componentId),
+    findFilesByComponentId(ctx, componentId),
+    findSearchByComponentId(ctx, componentId),
+  ]);
+
+  if (metadata) {
+    await ctx.db.delete(metadata._id);
+  }
+  if (code) {
+    await ctx.db.delete(code._id);
+  }
+  for (const file of files) {
+    await ctx.db.delete(file._id);
+  }
+  if (search) {
+    await ctx.db.delete(search._id);
+  }
+
+  const deletedCounts = {
+    components: metadata ? 1 : 0,
+    componentCode: code ? 1 : 0,
+    componentFiles: files.length,
+    componentSearch: search ? 1 : 0,
+  };
+  const totalDeleted =
+    deletedCounts.components +
+    deletedCounts.componentCode +
+    deletedCounts.componentFiles +
+    deletedCounts.componentSearch;
+
+  return {
+    status: totalDeleted > 0 ? "deleted" : "not_found",
+    componentId,
+    deleted: deletedCounts,
+    totalDeleted,
+  };
 }
 
 function normalizePageSize(rawPageSize: number | undefined): number {
@@ -188,75 +317,7 @@ export const upsert = mutation({
   },
   handler: async (ctx, args) => {
     const records = await buildSplitComponentRecords(args.component);
-
-    const existingMetadata = await ctx.db
-      .query("components")
-      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", records.metadata.id))
-      .unique();
-
-    if (existingMetadata) {
-      await ctx.db.replace(existingMetadata._id, records.metadata);
-    } else {
-      await ctx.db.insert("components", records.metadata);
-    }
-
-    const existingCode = await ctx.db
-      .query("componentCode")
-      .withIndex("by_component_id", (indexQuery) =>
-        indexQuery.eq("componentId", records.code.componentId),
-      )
-      .unique();
-
-    if (existingCode) {
-      await ctx.db.replace(existingCode._id, records.code);
-    } else {
-      await ctx.db.insert("componentCode", records.code);
-    }
-
-    const existingFiles = await findFilesByComponentId(ctx, records.code.componentId);
-    const existingFileByPath = new Map(existingFiles.map((row) => [row.path, row]));
-    const nextFileByPath = new Map(records.files.map((row) => [row.path, row]));
-    const visitedPaths = new Set<string>();
-
-    for (const existingFile of existingFiles) {
-      if (visitedPaths.has(existingFile.path)) {
-        await ctx.db.delete(existingFile._id);
-        continue;
-      }
-      visitedPaths.add(existingFile.path);
-
-      const nextFile = nextFileByPath.get(existingFile.path);
-      if (!nextFile) {
-        await ctx.db.delete(existingFile._id);
-        continue;
-      }
-
-      await ctx.db.replace(existingFile._id, nextFile);
-    }
-
-    for (const nextFile of records.files) {
-      if (existingFileByPath.has(nextFile.path)) {
-        continue;
-      }
-
-      await ctx.db.insert("componentFiles", nextFile);
-    }
-
-    const existingSearch = await findSearchByComponentId(ctx, records.search.componentId);
-
-    if (existingSearch) {
-      await ctx.db.replace(existingSearch._id, records.search);
-      return {
-        status: "updated",
-        componentId: records.metadata.id,
-      };
-    }
-
-    await ctx.db.insert("componentSearch", records.search);
-    return {
-      status: "inserted",
-      componentId: records.metadata.id,
-    };
+    return upsertSplitRecords(ctx, records);
   },
 });
 
@@ -270,43 +331,120 @@ export const deleteComponentById = mutation({
       throw new Error("componentId must be non-empty");
     }
 
-    const [metadata, code, files, search] = await Promise.all([
-      findMetadataByComponentId(ctx, componentId),
-      findCodeByComponentId(ctx, componentId),
-      findFilesByComponentId(ctx, componentId),
-      findSearchByComponentId(ctx, componentId),
-    ]);
+    return deleteComponentRowsById(ctx, componentId);
+  },
+});
 
-    if (metadata) {
-      await ctx.db.delete(metadata._id);
-    }
-    if (code) {
-      await ctx.db.delete(code._id);
-    }
-    for (const file of files) {
-      await ctx.db.delete(file._id);
-    }
-    if (search) {
-      await ctx.db.delete(search._id);
-    }
+const ChangesetOperationValidator = v.union(
+  v.object({
+    type: v.literal("upsert"),
+    component: ComponentDocumentValidator,
+  }),
+  v.object({
+    type: v.literal("delete"),
+    componentId: v.string(),
+  }),
+);
 
-    const deletedCounts = {
-      components: metadata ? 1 : 0,
-      componentCode: code ? 1 : 0,
-      componentFiles: files.length,
-      componentSearch: search ? 1 : 0,
+type ResolvedChangesetOperation =
+  | {
+      type: "upsert";
+      componentId: string;
+      component: ComponentDocument;
+    }
+  | {
+      type: "delete";
+      componentId: string;
     };
-    const totalDeleted =
-      deletedCounts.components +
-      deletedCounts.componentCode +
-      deletedCounts.componentFiles +
-      deletedCounts.componentSearch;
+
+export const applyChangeset = mutation({
+  args: {
+    changesetId: v.string(),
+    operations: v.array(ChangesetOperationValidator),
+  },
+  handler: async (ctx, args) => {
+    const changesetId = args.changesetId.trim();
+    if (changesetId.length === 0) {
+      throw new Error("changesetId must be non-empty");
+    }
+
+    const seenUpsertIds = new Set<string>();
+    const seenDeleteIds = new Set<string>();
+    const resolved: ResolvedChangesetOperation[] = [];
+
+    for (const [index, operation] of args.operations.entries()) {
+      if (operation.type === "upsert") {
+        const componentId = await buildPublicComponentId(operation.component);
+
+        if (seenUpsertIds.has(componentId)) {
+          throw new Error(
+            `Duplicate upsert target component id '${componentId}' at operation #${index}`,
+          );
+        }
+
+        seenUpsertIds.add(componentId);
+        resolved.push({
+          type: "upsert",
+          componentId,
+          component: operation.component,
+        });
+        continue;
+      }
+
+      const componentId = operation.componentId.trim();
+      if (componentId.length === 0) {
+        throw new Error(`Delete operation at index ${index} has empty componentId`);
+      }
+
+      if (seenDeleteIds.has(componentId)) {
+        throw new Error(
+          `Duplicate delete target component id '${componentId}' at operation #${index}`,
+        );
+      }
+
+      seenDeleteIds.add(componentId);
+      resolved.push({
+        type: "delete",
+        componentId,
+      });
+    }
+
+    for (const componentId of seenUpsertIds) {
+      if (seenDeleteIds.has(componentId)) {
+        throw new Error(
+          `Conflicting operations for '${componentId}': contains both upsert and delete`,
+        );
+      }
+    }
+
+    const applied: Array<{ type: "upsert" | "delete"; componentId: string; result: unknown }> = [];
+
+    for (const operation of resolved) {
+      if (operation.type === "upsert") {
+        const records = await buildSplitComponentRecords(operation.component);
+        const result = await upsertSplitRecords(ctx, records);
+        applied.push({
+          type: "upsert",
+          componentId: operation.componentId,
+          result,
+        });
+      } else {
+        const result = await deleteComponentRowsById(ctx, operation.componentId);
+        applied.push({
+          type: "delete",
+          componentId: operation.componentId,
+          result,
+        });
+      }
+    }
 
     return {
-      status: totalDeleted > 0 ? "deleted" : "not_found",
-      componentId,
-      deleted: deletedCounts,
-      totalDeleted,
+      status: "applied" as const,
+      changesetId,
+      operationCount: resolved.length,
+      upsertCount: resolved.filter((operation) => operation.type === "upsert").length,
+      deleteCount: resolved.filter((operation) => operation.type === "delete").length,
+      applied,
     };
   },
 });

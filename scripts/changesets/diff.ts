@@ -4,6 +4,7 @@ import { ConvexHttpClient } from "convex/browser";
 
 import {
   diffChangesetAgainstSnapshot,
+  formatSnapshotIssues,
   fetchLiveSnapshot,
   hasValidationErrors,
   parseAndValidateChangeset,
@@ -27,11 +28,21 @@ async function main(): Promise<void> {
   const changesetPath = await resolveChangesetPath(options.changesetPath);
   const parsed = await parseAndValidateChangeset(changesetPath);
   if (hasValidationErrors(parsed.issues)) {
-    throw new Error("Changeset validation failed. Run data:changeset:validate for details.");
+    throw new Error("Changeset validation failed. Run data:validate for details.");
   }
 
   const client = new ConvexHttpClient(convexUrl);
   const snapshot = await fetchLiveSnapshot(client);
+  if (snapshot.parseIssues.length > 0) {
+    const lines = formatSnapshotIssues(snapshot.parseIssues)
+      .slice(0, 20)
+      .map((line) => `- ${line}`)
+      .join("\n");
+    throw new Error(
+      `Live Convex snapshot contains ${snapshot.parseIssues.length} invalid rows.\n${lines}\nRun bun run --cwd apps/backend validate:data for a full report.`,
+    );
+  }
+
   const summary = await diffChangesetAgainstSnapshot(parsed.resolvedOperations, snapshot);
 
   const output = {

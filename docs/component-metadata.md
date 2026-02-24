@@ -9,13 +9,16 @@ This project uses two related shapes:
 
 1. Edit local component docs in `data/components/<id>/meta.json`.
 2. Create a changeset:
-   - `bun run data:changeset:create`
+   - `bun run data:create`
+   - Default create mode is `delta`: it only includes changed/new upserts compared to live Convex.
+   - Add `-- --prune` to include delete operations for live component ids missing locally.
+   - Use `-- --mode full` to force a full desired-state upsert changeset.
 3. Validate the changeset:
-   - `bun run data:changeset:validate -- --changeset data/changesets/<id>.json`
+   - `bun run data:validate -- --changeset data/changesets/<id>.json`
 4. Diff against live Convex data:
-   - `bun run data:changeset:diff -- --changeset data/changesets/<id>.json`
+   - `bun run data:diff -- --changeset data/changesets/<id>.json`
 5. Publish to Convex:
-   - `bun run data:changeset:publish -- --changeset data/changesets/<id>.json`
+   - `bun run data:publish -- --changeset data/changesets/<id>.json`
 6. Optional live integrity/sync scripts:
    - `bun run --cwd apps/backend validate:data`
    - `bun run data:pull`
@@ -103,6 +106,7 @@ When a v2 document is upserted, backend derives:
 
 - Local `meta.json` `id` is an input identifier.
 - Backend generates a public component id via `buildPublicComponentId(...)` and stores that in v4 tables.
+- If local `id` already matches the canonical public-id pattern for the component (`<name+library-slug>-<8 hex>`), backend reuses it as-is (pull/create is idempotent).
 - Generated id is based on name/library slug plus a hash fingerprint of:
   - local `id`
   - `source.url`
