@@ -1,4 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import type { ComponentInstall } from "../../../../shared/component-schema";
 import { runAddCommand, type ExecutionResult } from "../add";
@@ -153,6 +156,67 @@ describe("runAddCommand", () => {
   });
 
   describe("--yes flag", () => {
+    it("fails fast when components.json is missing", async () => {
+      const component = createComponentWithInstall({
+        mode: "command",
+        source: "shadcn",
+        template: "shadcn@latest add button",
+      });
+      const { client } = createMockClient(async () => component);
+      const executor = createMockExecutor({ success: true, exitCode: 0 });
+
+      const cwd = process.cwd();
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-no-init-"));
+
+      try {
+        process.chdir(tempDir);
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("core-button", { yes: true, executor }, client);
+        });
+
+        expect(output.errors.some((line) => line.includes("components.json not found"))).toBe(true);
+        expect(output.exitCode).toBe(1);
+        expect(executor).toHaveBeenCalledTimes(0);
+      } finally {
+        process.chdir(cwd);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("auto-inits when --init-if-missing is set", async () => {
+      const component = createComponentWithInstall({
+        mode: "command",
+        source: "shadcn",
+        template: "shadcn@latest add button",
+      });
+      const { client } = createMockClient(async () => component);
+
+      const cwd = process.cwd();
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-auto-init-"));
+
+      const executor = mock(async (command: string) => {
+        if (command.includes("shadcn@latest init")) {
+          await writeFile(join(tempDir, "components.json"), "{}\n", "utf8");
+        }
+        return { success: true, exitCode: 0 } as ExecutionResult;
+      });
+
+      try {
+        process.chdir(tempDir);
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("core-button", { yes: true, initIfMissing: true, executor }, client);
+        });
+
+        const text = output.logs.join("\n");
+        expect(text).toContain("components.json not found. Running init:");
+        expect(text).toContain("Running: npx shadcn@latest add button");
+        expect(executor).toHaveBeenCalledTimes(2);
+      } finally {
+        process.chdir(cwd);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
     it("executes command and prints Done for command mode", async () => {
       const component = createComponentWithInstall({
         mode: "command",
@@ -162,15 +226,26 @@ describe("runAddCommand", () => {
       const { client } = createMockClient(async () => component);
       const executor = createMockExecutor({ success: true, exitCode: 0 });
 
-      const output = await captureCommandOutput(async () => {
-        await runAddCommand("core-button", { yes: true, executor }, client);
-      });
+      const cwd = process.cwd();
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-exec-"));
 
-      const text = output.logs.join("\n");
-      expect(text).toContain("Button (core-button)");
-      expect(text).toContain("Running: npx shadcn@latest add button");
-      expect(text).toContain("Done.");
-      expect(executor).toHaveBeenCalledTimes(1);
+      try {
+        await writeFile(join(tempDir, "components.json"), "{}\n", "utf8");
+        process.chdir(tempDir);
+
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("core-button", { yes: true, executor }, client);
+        });
+
+        const text = output.logs.join("\n");
+        expect(text).toContain("Button (core-button)");
+        expect(text).toContain("Running: npx shadcn@latest add button");
+        expect(text).toContain("Done.");
+        expect(executor).toHaveBeenCalledTimes(1);
+      } finally {
+        process.chdir(cwd);
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("executes command and shows remaining manual steps for hybrid mode", async () => {
@@ -183,15 +258,26 @@ describe("runAddCommand", () => {
       const { client } = createMockClient(async () => component);
       const executor = createMockExecutor({ success: true, exitCode: 0 });
 
-      const output = await captureCommandOutput(async () => {
-        await runAddCommand("chart-component", { yes: true, executor }, client);
-      });
+      const cwd = process.cwd();
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-hybrid-"));
 
-      const text = output.logs.join("\n");
-      expect(text).toContain("Running:");
-      expect(text).toContain("Done.");
-      expect(text).toContain("Remaining manual steps:");
-      expect(text).toContain("1. Add chart color tokens to global.css:");
+      try {
+        await writeFile(join(tempDir, "components.json"), "{}\n", "utf8");
+        process.chdir(tempDir);
+
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("chart-component", { yes: true, executor }, client);
+        });
+
+        const text = output.logs.join("\n");
+        expect(text).toContain("Running:");
+        expect(text).toContain("Done.");
+        expect(text).toContain("Remaining manual steps:");
+        expect(text).toContain("1. Add chart color tokens to global.css:");
+      } finally {
+        process.chdir(cwd);
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("sets exit code on command failure", async () => {
@@ -203,13 +289,24 @@ describe("runAddCommand", () => {
       const { client } = createMockClient(async () => component);
       const executor = createMockExecutor({ success: false, exitCode: 1, error: "Network error" });
 
-      const output = await captureCommandOutput(async () => {
-        await runAddCommand("core-button", { yes: true, executor }, client);
-      });
+      const cwd = process.cwd();
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-fail-"));
 
-      expect(output.errors).toContain("Command failed with exit code 1");
-      expect(output.errors).toContain("Network error");
-      expect(output.exitCode).toBe(1);
+      try {
+        await writeFile(join(tempDir, "components.json"), "{}\n", "utf8");
+        process.chdir(tempDir);
+
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("core-button", { yes: true, executor }, client);
+        });
+
+        expect(output.errors).toContain("Command failed with exit code 1");
+        expect(output.errors).toContain("Network error");
+        expect(output.exitCode).toBe(1);
+      } finally {
+        process.chdir(cwd);
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("does not execute for manual-only mode", async () => {

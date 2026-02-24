@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../backend/convex/_generated/api";
@@ -12,6 +14,7 @@ export type AddCliOptions = {
   json?: boolean;
   yes?: boolean;
   dryRun?: boolean;
+  initIfMissing?: boolean;
 };
 
 type InstallRenderResult = {
@@ -97,6 +100,16 @@ export async function runAddCommand(
   console.log(`${component.name} (${component.id})`);
 
   if (shouldExecute && rendered.command) {
+    const initState = await ensureProjectInitialized({
+      packageManager,
+      initIfMissing: options.initIfMissing,
+      executor,
+    });
+    if (!initState.ok) {
+      process.exitCode = 1;
+      return;
+    }
+
     console.log(`Running: ${rendered.command}`);
     const result = await executor(rendered.command);
     assertExecutionResult(result);
@@ -134,6 +147,50 @@ export async function runAddCommand(
       console.log(`${index + 1}. ${step}`);
     }
   }
+}
+
+type EnsureProjectInitializedOptions = {
+  packageManager: PackageManager;
+  initIfMissing?: boolean;
+  executor: CommandExecutor;
+};
+
+async function ensureProjectInitialized(options: EnsureProjectInitializedOptions) {
+  const projectDir = process.cwd();
+  const componentsJsonPath = join(projectDir, "components.json");
+
+  if (existsSync(componentsJsonPath)) {
+    return { ok: true };
+  }
+
+  if (!options.initIfMissing) {
+    console.error(
+      "components.json not found in current directory. Initialize shadcn first (for example: `npx shadcn@latest init -d -y`) or rerun with --init-if-missing.",
+    );
+    return { ok: false };
+  }
+
+  const initCommand = toRunnerCommand("shadcn@latest init -d -y", options.packageManager);
+  console.log(`components.json not found. Running init: ${initCommand}`);
+  const initResult = await options.executor(initCommand);
+  assertExecutionResult(initResult);
+
+  if (!initResult.success) {
+    console.error(`Init command failed with exit code ${initResult.exitCode}`);
+    if (initResult.error) {
+      console.error(initResult.error);
+    }
+    return { ok: false };
+  }
+
+  if (!existsSync(componentsJsonPath)) {
+    console.error(
+      "Init command finished but components.json is still missing. Please run shadcn init manually and try again.",
+    );
+    return { ok: false };
+  }
+
+  return { ok: true };
 }
 
 function outputJson(

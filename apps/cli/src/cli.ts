@@ -92,6 +92,7 @@ program
   .option("--json", "Output JSON")
   .option("--yes", "Execute install command non-interactively")
   .option("--dry-run", "Print planned changes without executing")
+  .option("--init-if-missing", "Run shadcn init automatically when components.json is missing")
   .action(async (id: string, options: AddCliOptions, command: Command) => {
     const globalOptions = command.optsWithGlobals<{ config?: string }>();
     let loadedConfig = null;
