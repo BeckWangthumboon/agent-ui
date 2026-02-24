@@ -184,7 +184,6 @@ export type ViewComponent = {
   framework: ComponentDocument["framework"];
   styling: ComponentDocument["styling"];
   dependencies: ComponentDocument["dependencies"];
-  intent: string;
   motionLevel: ComponentDocument["motionLevel"];
   primitiveLibrary: string;
   animationLibrary: string;
@@ -208,7 +207,6 @@ export function createSampleViewComponent(): ViewComponent {
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
-    intent: component.intent,
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary ?? "none",
     animationLibrary: component.animationLibrary ?? "none",

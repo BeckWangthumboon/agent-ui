@@ -76,9 +76,17 @@ Behavior:
 - Trims and validates non-empty id.
 - Creates a Convex client from `CONVEX_URL`.
 - Queries `api.search.getById`.
-- `--code` or `--json` requests code payload (`includeCode: true`).
+- `--code` requests code payload (`includeCode: true`).
 - `--example` requests a canonical usage example payload (`includeExample: true`).
-- Prints summary output, verbose metadata, full code blocks, canonical example blocks, or raw JSON.
+- Prints summary output, verbose metadata, full code blocks, canonical example blocks, or structured JSON.
+- Non-verbose output includes primitive/animation library values when present (non-`none`).
+- JSON contract:
+  - `--json`: metadata only
+  - `--json --code`: metadata + code
+  - `--json --verbose`: metadata + verbose (no code)
+  - `--json --example`: metadata + canonical usage example
+  - `--json --verbose --code --example`: full payload
+  - Stable envelope always included: `included: { code: boolean, verbose: boolean, example: boolean }`
 
 Failure cases:
 

@@ -40,7 +40,6 @@ type ViewComponent = {
   framework: ComponentRecord["framework"];
   styling: ComponentRecord["styling"];
   dependencies: ComponentRecord["dependencies"];
-  intent: string;
   motionLevel: ComponentRecord["motionLevel"];
   primitiveLibrary: ComponentRecord["primitiveLibrary"];
   animationLibrary: ComponentRecord["animationLibrary"];
@@ -286,11 +285,7 @@ async function toViewComponent(
   includeCode: boolean,
   includeExample: boolean,
 ): Promise<ViewComponent> {
-  const [search, code, fileRecords] = await Promise.all([
-    ctx.db
-      .query("componentSearch")
-      .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
-      .unique(),
+  const [code, fileRecords] = await Promise.all([
     ctx.db
       .query("componentCode")
       .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", component.id))
@@ -313,7 +308,6 @@ async function toViewComponent(
     framework: component.framework,
     styling: component.styling,
     dependencies: component.dependencies,
-    intent: search?.intent ?? toFallbackIntent(component.name),
     motionLevel: component.motionLevel,
     primitiveLibrary: component.primitiveLibrary,
     animationLibrary: component.animationLibrary,

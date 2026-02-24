@@ -24,7 +24,6 @@ type ViewComponent = {
   framework: ComponentFramework;
   styling: ComponentStyling;
   dependencies: Dependency[];
-  intent: string;
   motionLevel: ComponentMotion;
   primitiveLibrary: string;
   animationLibrary: string;
@@ -40,6 +39,47 @@ type ViewComponent = {
   example?: ComponentCodeFile;
 };
 
+type ViewJsonMetadata = {
+  schemaVersion: number;
+  id: string;
+  name: string;
+  framework: ComponentFramework;
+  styling: ComponentStyling;
+  motionLevel: ComponentMotion;
+  primitiveLibrary?: string;
+  animationLibrary?: string;
+  source: {
+    url: string;
+  };
+};
+
+type ViewJsonVerbose = {
+  source: ComponentSource;
+  dependencies: Dependency[];
+  primitiveLibrary: string;
+  animationLibrary: string;
+  constraints?: Record<string, never>;
+  codeSummary: {
+    entryFile: string;
+    fileCount: number;
+  };
+};
+
+type ViewJsonPayload = {
+  included: {
+    code: boolean;
+    verbose: boolean;
+    example: boolean;
+  };
+  metadata: ViewJsonMetadata;
+  verbose?: ViewJsonVerbose;
+  code?: {
+    entryFile: string;
+    files: ComponentCodeFile[];
+  } | null;
+  example?: ComponentCodeFile | null;
+};
+
 export async function runViewCommand(
   id: string,
   options: ViewCliOptions,
@@ -53,10 +93,13 @@ export async function runViewCommand(
     return;
   }
 
+  const includeCode = Boolean(options.code);
+  const includeExample = Boolean(options.example);
+
   const component = (await client.query(api.search.getById, {
     id: normalizedId,
-    includeCode: Boolean(options.code || options.json),
-    includeExample: Boolean(options.example),
+    includeCode,
+    includeExample,
   })) as ViewComponent | null;
 
   if (!component) {
@@ -66,14 +109,24 @@ export async function runViewCommand(
   }
 
   if (options.json) {
-    console.log(JSON.stringify(component, null, 2));
+    console.log(
+      JSON.stringify(
+        toViewJsonPayload(component, {
+          includeCode,
+          verbose: Boolean(options.verbose),
+          includeExample,
+        }),
+        null,
+        2,
+      ),
+    );
     return;
   }
 
   printComponent(component, {
     verbose: Boolean(options.verbose),
-    includeCode: Boolean(options.code),
-    includeExample: Boolean(options.example),
+    includeCode,
+    includeExample,
   });
 }
 
@@ -83,13 +136,77 @@ type PrintOptions = {
   includeExample: boolean;
 };
 
+function toViewJsonPayload(
+  component: ViewComponent,
+  options: { includeCode: boolean; verbose: boolean; includeExample: boolean },
+): ViewJsonPayload {
+  const payload: ViewJsonPayload = {
+    included: {
+      code: options.includeCode,
+      verbose: options.verbose,
+      example: options.includeExample,
+    },
+    metadata: {
+      schemaVersion: component.schemaVersion,
+      id: component.id,
+      name: component.name,
+      framework: component.framework,
+      styling: component.styling,
+      motionLevel: component.motionLevel,
+      source: {
+        url: component.source.url,
+      },
+    },
+  };
+
+  if (isDisplayLibrary(component.primitiveLibrary)) {
+    payload.metadata.primitiveLibrary = component.primitiveLibrary;
+  }
+
+  if (isDisplayLibrary(component.animationLibrary)) {
+    payload.metadata.animationLibrary = component.animationLibrary;
+  }
+
+  if (options.verbose) {
+    payload.verbose = {
+      source: component.source,
+      dependencies: component.dependencies,
+      primitiveLibrary: component.primitiveLibrary,
+      animationLibrary: component.animationLibrary,
+      constraints: component.constraints,
+      codeSummary: component.codeSummary,
+    };
+  }
+
+  if (options.includeCode) {
+    payload.code = component.code ?? null;
+  }
+
+  if (options.includeExample) {
+    payload.example = component.example ?? null;
+  }
+
+  return payload;
+}
+
 function printComponent(component: ViewComponent, options: PrintOptions): void {
   console.log(`${component.name} (${component.id})`);
-  console.log(`intent: ${component.intent}`);
   console.log(
     `stack: framework=${component.framework} | styling=${component.styling} | motion=${component.motionLevel}`,
   );
   console.log(`source: ${component.source.url}`);
+
+  const libraryParts: string[] = [];
+  if (isDisplayLibrary(component.primitiveLibrary)) {
+    libraryParts.push(`primitive=${component.primitiveLibrary}`);
+  }
+  if (isDisplayLibrary(component.animationLibrary)) {
+    libraryParts.push(`animation=${component.animationLibrary}`);
+  }
+
+  if (libraryParts.length > 0) {
+    console.log(`libraries: ${libraryParts.join(" | ")}`);
+  }
 
   if (options.verbose) {
     console.log(`primitive.library: ${component.primitiveLibrary}`);
@@ -158,4 +275,13 @@ function printComponent(component: ViewComponent, options: PrintOptions): void {
 
   console.log(`--- example: ${component.example.path} ---`);
   console.log(component.example.content);
+}
+
+function isDisplayLibrary(value: string | null | undefined): value is string {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && normalized !== "none";
 }

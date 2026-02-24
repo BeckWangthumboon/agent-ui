@@ -62,7 +62,9 @@ async function run() {
   const clearInstall = argMap.get("--clear-install") === "true";
   const clearExample = argMap.get("--clear-example") === "true";
 
-  const installRaw = await maybeReadJson(argMap.get("--install-json") ?? argMap.get("--install-file"));
+  const installRaw = await maybeReadJson(
+    argMap.get("--install-json") ?? argMap.get("--install-file"),
+  );
   const install = installRaw ? ComponentInstallSchema.parse(installRaw) : undefined;
 
   const exampleFile = argMap.get("--example-file");
