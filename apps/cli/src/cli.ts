@@ -89,6 +89,7 @@ program
   .description("Install a component by id")
   .argument("<id>", "Component id (required)")
   .option("--package-manager <manager>", "Package manager: npx|bunx|pnpm|yarn", parsePackageManager)
+  .option("--project-dir <path>", "Directory where install command runs (defaults to cwd)")
   .option("--json", "Output JSON")
   .option("--yes", "Execute install command non-interactively")
   .option("--dry-run", "Print planned changes without executing")

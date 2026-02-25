@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { join, resolve as resolvePath } from "node:path";
 import type { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../backend/convex/_generated/api";
@@ -11,6 +11,7 @@ const DEFAULT_PACKAGE_MANAGER: PackageManager = "npx";
 
 export type AddCliOptions = {
   packageManager?: PackageManager;
+  projectDir?: string;
   json?: boolean;
   yes?: boolean;
   dryRun?: boolean;
@@ -43,7 +44,7 @@ function assertExecutionResult(value: unknown): asserts value is ExecutionResult
   }
 }
 
-export type CommandExecutor = (command: string) => Promise<ExecutionResult>;
+export type CommandExecutor = (command: string, cwd: string) => Promise<ExecutionResult>;
 
 type RunAddCommandOptions = AddCliOptions & {
   executor?: CommandExecutor;
@@ -79,6 +80,13 @@ export async function runAddCommand(
     return;
   }
 
+  const projectDirState = resolveProjectDirectory(options.projectDir);
+  if (!projectDirState.ok) {
+    process.exitCode = 1;
+    return;
+  }
+  const projectDir = projectDirState.path;
+
   const packageManager = options.packageManager ?? DEFAULT_PACKAGE_MANAGER;
   const rendered = renderInstall(component.install, packageManager);
   const shouldExecute = options.yes && !options.dryRun && rendered.command;
@@ -99,14 +107,14 @@ export async function runAddCommand(
   console.log(`${component.name} (${component.id})`);
 
   if (shouldExecute && rendered.command) {
-    const initState = ensureShadcnProjectInitialized(component.install);
+    const initState = ensureShadcnProjectInitialized(component.install, projectDir);
     if (!initState.ok) {
       process.exitCode = 1;
       return;
     }
 
     console.log(`Running: ${rendered.command}`);
-    const result = await executor(rendered.command);
+    const result = await executor(rendered.command, projectDir);
     assertExecutionResult(result);
 
     if (!result.success) {
@@ -144,23 +152,39 @@ export async function runAddCommand(
   }
 }
 
-function ensureShadcnProjectInitialized(install: ComponentInstall) {
+function ensureShadcnProjectInitialized(install: ComponentInstall, projectDir: string) {
   if (install.source !== "shadcn") {
     return { ok: true };
   }
 
-  const componentsJsonPath = join(process.cwd(), "components.json");
+  const componentsJsonPath = join(projectDir, "components.json");
   if (existsSync(componentsJsonPath)) {
     return { ok: true };
   }
 
   console.error(
-    "No shadcn-initialized React project detected in current directory (components.json not found).",
+    `No shadcn-initialized React project detected at ${projectDir} (components.json not found).`,
   );
   console.error(
-    "Run `npx shadcn@latest init -d -y` (or the equivalent bunx/pnpm/yarn dlx command), then rerun this command.",
+    `Run \`npx shadcn@latest init -d -y\` in ${projectDir} (or the equivalent bunx/pnpm/yarn dlx command), then rerun this command.`,
   );
   return { ok: false };
+}
+
+function resolveProjectDirectory(projectDir?: string) {
+  const resolvedPath = projectDir ? resolvePath(process.cwd(), projectDir) : process.cwd();
+
+  if (!existsSync(resolvedPath)) {
+    console.error(`Project directory not found: ${resolvedPath}`);
+    return { ok: false as const };
+  }
+
+  if (!statSync(resolvedPath).isDirectory()) {
+    console.error(`Project directory is not a directory: ${resolvedPath}`);
+    return { ok: false as const };
+  }
+
+  return { ok: true as const, path: resolvedPath };
 }
 
 function outputJson(
@@ -190,13 +214,14 @@ function outputJson(
   );
 }
 
-async function spawnCommand(command: string): Promise<ExecutionResult> {
+async function spawnCommand(command: string, cwd: string) {
   if (!command.trim()) {
     return { success: false, exitCode: 1, error: "Empty command" };
   }
 
   try {
     const subprocess = Bun.spawn(["sh", "-c", command], {
+      cwd,
       stdout: "inherit",
       stderr: "inherit",
     });

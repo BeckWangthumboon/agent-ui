@@ -137,6 +137,7 @@ export function mergeSearchOptions(
 
 type AddOptions = {
   packageManager?: PackageManager;
+  projectDir?: string;
   json?: boolean;
   yes?: boolean;
   dryRun?: boolean;
@@ -156,6 +157,7 @@ export function mergeAddOptions(cliOptions: AddOptions, config: AgentUiConfig | 
 
   return {
     packageManager: cliOptions.packageManager ?? addDefaults?.packageManager,
+    projectDir: cliOptions.projectDir,
     json: cliOptions.json,
     yes: cliOptions.yes,
     dryRun: cliOptions.dryRun,

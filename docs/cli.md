@@ -100,6 +100,7 @@ Prints install instructions for a component.
 Options:
 
 - `--package-manager <manager>` (`npx|bunx|pnpm|yarn`)
+- `--project-dir <path>` (directory to run install command; defaults to current working directory)
 - `--json`
 - `--yes` (execute install command)
 - `--dry-run` (preview only; do not execute)
@@ -113,9 +114,10 @@ Behavior:
 - For `install.mode=command`, prints the rendered install command.
 - For `install.mode=manual`, prints ordered manual steps.
 - For `install.mode=command+manual`, prints both command and steps.
-- With `--yes`, executes the rendered install command.
-- If `install.source=shadcn`, `--yes` requires `components.json` in the current directory.
-- If missing, `add` fails fast with guidance to run `shadcn init -d -y` manually, then rerun.
+- Resolves install directory from `--project-dir` or falls back to current working directory.
+- With `--yes`, executes the rendered install command in the resolved install directory.
+- If `install.source=shadcn`, `--yes` requires `components.json` in the resolved install directory.
+- If missing, `add` fails fast with guidance to run `shadcn init -d -y` manually in that directory, then rerun.
 - Runner mapping:
   - `npx <template>`
   - `bunx <template>`
@@ -127,6 +129,7 @@ Failure cases:
 - Empty id.
 - Component not found.
 - Missing install metadata.
+- Invalid `--project-dir` path.
 - `--yes` for `install.source=shadcn` when `components.json` is missing.
 
 ## Config File

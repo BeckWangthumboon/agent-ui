@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -155,6 +155,22 @@ describe("runAddCommand", () => {
     expect(output.exitCode).toBe(1);
   });
 
+  it("fails when projectDir does not exist", async () => {
+    const component = createComponentWithInstall({
+      mode: "manual",
+      source: "manual",
+      steps: ["Copy files manually"],
+    });
+    const { client } = createMockClient(async () => component);
+
+    const output = await captureCommandOutput(async () => {
+      await runAddCommand("core-button", { projectDir: "./does-not-exist" }, client);
+    });
+
+    expect(output.errors.some((line) => line.includes("Project directory not found:"))).toBe(true);
+    expect(output.exitCode).toBe(1);
+  });
+
   describe("--yes flag", () => {
     it("fails fast for shadcn installs when components.json is missing", async () => {
       const component = createComponentWithInstall({
@@ -215,6 +231,43 @@ describe("runAddCommand", () => {
       } finally {
         process.chdir(cwd);
         await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("uses projectDir for shadcn checks and command execution", async () => {
+      const component = createComponentWithInstall({
+        mode: "command",
+        source: "shadcn",
+        template: "shadcn@latest add button",
+      });
+      const { client } = createMockClient(async () => component);
+
+      const cwd = process.cwd();
+      const rootDir = await mkdtemp(join(tmpdir(), "agent-ui-add-root-"));
+      const projectDir = join(rootDir, "apps", "web");
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(join(projectDir, "components.json"), "{}\n", "utf8");
+
+      const calls: Array<{ command: string; cwd: string }> = [];
+      const executor = mock(async (command: string, executionCwd: string) => {
+        calls.push({ command, cwd: executionCwd });
+        return { success: true, exitCode: 0 } as ExecutionResult;
+      });
+
+      try {
+        process.chdir(rootDir);
+        const output = await captureCommandOutput(async () => {
+          await runAddCommand("core-button", { yes: true, projectDir, executor }, client);
+        });
+
+        const text = output.logs.join("\n");
+        expect(text).toContain("Running: npx shadcn@latest add button");
+        expect(text).toContain("Done.");
+        expect(executor).toHaveBeenCalledTimes(1);
+        expect(calls[0]?.cwd).toBe(projectDir);
+      } finally {
+        process.chdir(cwd);
+        await rm(rootDir, { recursive: true, force: true });
       }
     });
 
