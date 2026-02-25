@@ -103,7 +103,6 @@ Options:
 - `--json`
 - `--yes` (execute install command)
 - `--dry-run` (preview only; do not execute)
-- `--init-if-missing` (auto-run `shadcn init -d -y` when `components.json` is missing)
 
 Behavior:
 
@@ -115,9 +114,8 @@ Behavior:
 - For `install.mode=manual`, prints ordered manual steps.
 - For `install.mode=command+manual`, prints both command and steps.
 - With `--yes`, executes the rendered install command.
-- If `components.json` is missing and `--yes` is set:
-  - default behavior: fail fast with an actionable init message,
-  - with `--init-if-missing`: runs `shadcn init -d -y` first, then executes install.
+- If `install.source=shadcn`, `--yes` requires `components.json` in the current directory.
+- If missing, `add` fails fast with guidance to run `shadcn init -d -y` manually, then rerun.
 - Runner mapping:
   - `npx <template>`
   - `bunx <template>`
@@ -129,8 +127,7 @@ Failure cases:
 - Empty id.
 - Component not found.
 - Missing install metadata.
-- `--yes` in a non-initialized project (`components.json` missing) without `--init-if-missing`.
-- Init command fails (when `--init-if-missing` is used).
+- `--yes` for `install.source=shadcn` when `components.json` is missing.
 
 ## Config File
 

@@ -14,7 +14,6 @@ export type AddCliOptions = {
   json?: boolean;
   yes?: boolean;
   dryRun?: boolean;
-  initIfMissing?: boolean;
 };
 
 type InstallRenderResult = {
@@ -100,11 +99,7 @@ export async function runAddCommand(
   console.log(`${component.name} (${component.id})`);
 
   if (shouldExecute && rendered.command) {
-    const initState = await ensureProjectInitialized({
-      packageManager,
-      initIfMissing: options.initIfMissing,
-      executor,
-    });
+    const initState = ensureShadcnProjectInitialized(component.install);
     if (!initState.ok) {
       process.exitCode = 1;
       return;
@@ -149,48 +144,23 @@ export async function runAddCommand(
   }
 }
 
-type EnsureProjectInitializedOptions = {
-  packageManager: PackageManager;
-  initIfMissing?: boolean;
-  executor: CommandExecutor;
-};
+function ensureShadcnProjectInitialized(install: ComponentInstall) {
+  if (install.source !== "shadcn") {
+    return { ok: true };
+  }
 
-async function ensureProjectInitialized(options: EnsureProjectInitializedOptions) {
-  const projectDir = process.cwd();
-  const componentsJsonPath = join(projectDir, "components.json");
-
+  const componentsJsonPath = join(process.cwd(), "components.json");
   if (existsSync(componentsJsonPath)) {
     return { ok: true };
   }
 
-  if (!options.initIfMissing) {
-    console.error(
-      "components.json not found in current directory. Initialize shadcn first (for example: `npx shadcn@latest init -d -y`) or rerun with --init-if-missing.",
-    );
-    return { ok: false };
-  }
-
-  const initCommand = toRunnerCommand("shadcn@latest init -d -y", options.packageManager);
-  console.log(`components.json not found. Running init: ${initCommand}`);
-  const initResult = await options.executor(initCommand);
-  assertExecutionResult(initResult);
-
-  if (!initResult.success) {
-    console.error(`Init command failed with exit code ${initResult.exitCode}`);
-    if (initResult.error) {
-      console.error(initResult.error);
-    }
-    return { ok: false };
-  }
-
-  if (!existsSync(componentsJsonPath)) {
-    console.error(
-      "Init command finished but components.json is still missing. Please run shadcn init manually and try again.",
-    );
-    return { ok: false };
-  }
-
-  return { ok: true };
+  console.error(
+    "No shadcn-initialized React project detected in current directory (components.json not found).",
+  );
+  console.error(
+    "Run `npx shadcn@latest init -d -y` (or the equivalent bunx/pnpm/yarn dlx command), then rerun this command.",
+  );
+  return { ok: false };
 }
 
 function outputJson(

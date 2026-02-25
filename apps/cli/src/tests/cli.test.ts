@@ -36,7 +36,7 @@ describe("cli command wiring", () => {
     expect(stdout).toContain("add [options] <id>");
   });
 
-  it("shows --init-if-missing in add help output", () => {
+  it("does not show --init-if-missing in add help output", () => {
     const result = Bun.spawnSync({
       cmd: [bunExecutable, "run", cliEntry, "add", "--help"],
       env: process.env,
@@ -46,7 +46,7 @@ describe("cli command wiring", () => {
 
     expect(result.exitCode).toBe(0);
     const stdout = decoder.decode(result.stdout);
-    expect(stdout).toContain("--init-if-missing");
+    expect(stdout).not.toContain("--init-if-missing");
   });
 
   it("fails fast when CONVEX_URL is missing", () => {

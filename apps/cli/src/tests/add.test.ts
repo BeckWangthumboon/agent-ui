@@ -156,7 +156,7 @@ describe("runAddCommand", () => {
   });
 
   describe("--yes flag", () => {
-    it("fails fast when components.json is missing", async () => {
+    it("fails fast for shadcn installs when components.json is missing", async () => {
       const component = createComponentWithInstall({
         mode: "command",
         source: "shadcn",
@@ -174,7 +174,14 @@ describe("runAddCommand", () => {
           await runAddCommand("core-button", { yes: true, executor }, client);
         });
 
-        expect(output.errors.some((line) => line.includes("components.json not found"))).toBe(true);
+        expect(
+          output.errors.some((line) =>
+            line.includes("No shadcn-initialized React project detected"),
+          ),
+        ).toBe(true);
+        expect(output.errors.some((line) => line.includes("npx shadcn@latest init -d -y"))).toBe(
+          true,
+        );
         expect(output.exitCode).toBe(1);
         expect(executor).toHaveBeenCalledTimes(0);
       } finally {
@@ -183,34 +190,28 @@ describe("runAddCommand", () => {
       }
     });
 
-    it("auto-inits when --init-if-missing is set", async () => {
+    it("does not require components.json for non-shadcn command installs", async () => {
       const component = createComponentWithInstall({
         mode: "command",
-        source: "shadcn",
-        template: "shadcn@latest add button",
+        source: "manual",
+        template: "agent-ui add ai-elements-card",
       });
       const { client } = createMockClient(async () => component);
+      const executor = createMockExecutor({ success: true, exitCode: 0 });
 
       const cwd = process.cwd();
-      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-auto-init-"));
-
-      const executor = mock(async (command: string) => {
-        if (command.includes("shadcn@latest init")) {
-          await writeFile(join(tempDir, "components.json"), "{}\n", "utf8");
-        }
-        return { success: true, exitCode: 0 } as ExecutionResult;
-      });
+      const tempDir = await mkdtemp(join(tmpdir(), "agent-ui-add-non-shadcn-"));
 
       try {
         process.chdir(tempDir);
         const output = await captureCommandOutput(async () => {
-          await runAddCommand("core-button", { yes: true, initIfMissing: true, executor }, client);
+          await runAddCommand("core-button", { yes: true, executor }, client);
         });
 
         const text = output.logs.join("\n");
-        expect(text).toContain("components.json not found. Running init:");
-        expect(text).toContain("Running: npx shadcn@latest add button");
-        expect(executor).toHaveBeenCalledTimes(2);
+        expect(text).toContain("Running: npx agent-ui add ai-elements-card");
+        expect(text).toContain("Done.");
+        expect(executor).toHaveBeenCalledTimes(1);
       } finally {
         process.chdir(cwd);
         await rm(tempDir, { recursive: true, force: true });
