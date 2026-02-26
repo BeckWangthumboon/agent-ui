@@ -34,6 +34,8 @@ const ComponentAnimationLibraryValues = literalTupleFromUnion(COMPONENT_ANIMATIO
 const ComponentFileKindValues = ["code", "example"] as const;
 const InstallModeValues = ["command", "manual", "command+manual"] as const;
 const InstallSourceValues = ["manual", "shadcn"] as const;
+export const EMBEDDING_MODEL = "text-embedding-3-small" as const;
+export const EMBEDDING_DIMENSIONS = 1536 as const;
 
 export const ComponentFrameworkValidator = COMPONENT_FRAMEWORKS;
 export type ComponentFramework = Infer<typeof ComponentFrameworkValidator>;
@@ -193,10 +195,21 @@ export const componentSearchFields = {
   capabilities: v.array(v.string()),
   synonyms: v.array(v.string()),
   topics: v.array(ComponentTopicValidator),
+  searchText: v.optional(v.string()),
 } as const;
 
 export const ComponentSearchDocumentValidator = v.object(componentSearchFields);
 export type ComponentSearchDocument = Infer<typeof ComponentSearchDocumentValidator>;
+
+export const componentEmbeddingFields = {
+  schemaVersion: v.literal(1),
+  componentId: v.string(),
+  model: v.literal(EMBEDDING_MODEL),
+  embedding: v.array(v.float64()),
+} as const;
+
+export const ComponentEmbeddingDocumentValidator = v.object(componentEmbeddingFields);
+export type ComponentEmbeddingDocument = Infer<typeof ComponentEmbeddingDocumentValidator>;
 
 const NonEmptyTextSchema = z.string().trim().min(1);
 
@@ -369,7 +382,16 @@ export const ComponentSearchDocumentSchema: z.ZodType<ComponentSearchDocument> =
   capabilities: z.array(NonEmptyTextSchema).default([]),
   synonyms: z.array(NonEmptyTextSchema).default([]),
   topics: z.array(ComponentTopicSchema).default([]),
+  searchText: NonEmptyTextSchema.optional(),
 });
+
+export const ComponentEmbeddingDocumentSchema: z.ZodType<ComponentEmbeddingDocument> =
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    componentId: NonEmptyTextSchema,
+    model: z.literal(EMBEDDING_MODEL),
+    embedding: z.array(z.number()).length(EMBEDDING_DIMENSIONS),
+  });
 
 export function parseComponentDocument(input: unknown): ComponentDocument {
   return ComponentDocumentSchema.parse(input);

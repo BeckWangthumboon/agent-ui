@@ -1,7 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
 
 import {
+  EMBEDDING_DIMENSIONS,
   componentCodeFields,
+  componentEmbeddingFields,
   componentFileFields,
   componentMetadataFields,
   componentSearchFields,
@@ -22,5 +24,13 @@ export default defineSchema({
     .index("by_component_id", ["componentId"])
     .index("by_component_kind", ["componentId", "kind"])
     .index("by_component_path", ["componentId", "path"]),
-  componentSearch: defineTable(componentSearchFields).index("by_component_id", ["componentId"]),
+  componentSearch: defineTable(componentSearchFields)
+    .index("by_component_id", ["componentId"])
+    .searchIndex("by_search_text", { searchField: "searchText" }),
+  componentEmbeddings: defineTable(componentEmbeddingFields)
+    .index("by_component_id", ["componentId"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: EMBEDDING_DIMENSIONS,
+    }),
 });

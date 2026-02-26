@@ -9,7 +9,8 @@
     "pull": "bun run scripts/sync-convex-data.ts",
     "validate:data": "bun run scripts/validate-convex-data.ts",
     "report:missing-install": "bun run scripts/report-missing-install.ts",
-    "patch:component-fields": "bun run scripts/patch-component-fields.ts"
+    "patch:component-fields": "bun run scripts/patch-component-fields.ts",
+    "reindex:embeddings": "bun run scripts/reindex-component-embeddings.ts"
   },
   "dependencies": {
     "@convex-dev/migrations": "^0.3.1",

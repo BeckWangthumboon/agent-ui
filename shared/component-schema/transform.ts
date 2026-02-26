@@ -7,6 +7,7 @@ import type {
   ComponentPrimitiveLibrary,
   ComponentSearchDocument,
 } from "./types";
+import { buildComponentEmbeddingText } from "./embeddingText";
 
 const ID_HASH_LENGTH = 8;
 const CANONICAL_EXAMPLE_FILE_PATH = "example.tsx";
@@ -169,6 +170,13 @@ export async function buildSplitComponentRecords(component: ComponentDocument): 
     capabilities: component.capabilities,
     synonyms: component.synonyms,
     topics: component.topics,
+    searchText: buildComponentEmbeddingText({
+      name: component.name,
+      intent: component.intent,
+      capabilities: component.capabilities,
+      synonyms: component.synonyms,
+      topics: component.topics,
+    }),
   };
 
   return {

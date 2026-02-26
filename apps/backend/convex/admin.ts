@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 import {
@@ -14,21 +13,7 @@ import {
   ComponentInstallValidator,
 } from "./validators";
 
-type ComponentSearchRecord = Doc<"componentSearch">;
-type ComponentFileRecord = Doc<"componentFiles">;
-type ExportableTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
 type SplitComponentRecords = Awaited<ReturnType<typeof buildSplitComponentRecords>>;
-type DeleteComponentResult = {
-  status: "deleted" | "not_found";
-  componentId: string;
-  deleted: {
-    components: number;
-    componentCode: number;
-    componentFiles: number;
-    componentSearch: number;
-  };
-  totalDeleted: number;
-};
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
@@ -36,17 +21,27 @@ const MAX_PAGE_SIZE = 500;
 async function findSearchByComponentId(
   ctx: MutationCtx,
   componentId: string,
-): Promise<ComponentSearchRecord | null> {
+) {
   return ctx.db
     .query("componentSearch")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .unique();
 }
 
+async function findEmbeddingsByComponentId(
+  ctx: MutationCtx,
+  componentId: string,
+) {
+  return ctx.db
+    .query("componentEmbeddings")
+    .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
+    .collect();
+}
+
 async function findFilesByComponentId(
   ctx: MutationCtx,
   componentId: string,
-): Promise<ComponentFileRecord[]> {
+) {
   return ctx.db
     .query("componentFiles")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
@@ -79,7 +74,7 @@ async function findExampleFilesByComponentId(ctx: MutationCtx, componentId: stri
 async function upsertSplitRecords(
   ctx: MutationCtx,
   records: SplitComponentRecords,
-): Promise<{ status: "inserted" | "updated"; componentId: string }> {
+) {
   const [existingMetadata, existingCode, existingFiles, existingSearch] = await Promise.all([
     findMetadataByComponentId(ctx, records.metadata.id),
     findCodeByComponentId(ctx, records.code.componentId),
@@ -148,12 +143,13 @@ async function upsertSplitRecords(
 async function deleteComponentRowsById(
   ctx: MutationCtx,
   componentId: string,
-): Promise<DeleteComponentResult> {
-  const [metadata, code, files, search] = await Promise.all([
+) {
+  const [metadata, code, files, search, embeddings] = await Promise.all([
     findMetadataByComponentId(ctx, componentId),
     findCodeByComponentId(ctx, componentId),
     findFilesByComponentId(ctx, componentId),
     findSearchByComponentId(ctx, componentId),
+    findEmbeddingsByComponentId(ctx, componentId),
   ]);
 
   if (metadata) {
@@ -168,18 +164,23 @@ async function deleteComponentRowsById(
   if (search) {
     await ctx.db.delete(search._id);
   }
+  for (const embedding of embeddings) {
+    await ctx.db.delete(embedding._id);
+  }
 
   const deletedCounts = {
     components: metadata ? 1 : 0,
     componentCode: code ? 1 : 0,
     componentFiles: files.length,
     componentSearch: search ? 1 : 0,
+    componentEmbeddings: embeddings.length,
   };
   const totalDeleted =
     deletedCounts.components +
     deletedCounts.componentCode +
     deletedCounts.componentFiles +
-    deletedCounts.componentSearch;
+    deletedCounts.componentSearch +
+    deletedCounts.componentEmbeddings;
 
   return {
     status: totalDeleted > 0 ? "deleted" : "not_found",
@@ -189,7 +190,7 @@ async function deleteComponentRowsById(
   };
 }
 
-function normalizePageSize(rawPageSize: number | undefined): number {
+function normalizePageSize(rawPageSize: number | undefined) {
   if (rawPageSize === undefined || !Number.isFinite(rawPageSize)) {
     return DEFAULT_PAGE_SIZE;
   }
@@ -209,12 +210,13 @@ export const exportTablePage = query({
       v.literal("componentCode"),
       v.literal("componentFiles"),
       v.literal("componentSearch"),
+      v.literal("componentEmbeddings"),
     ),
     cursor: v.optional(v.string()),
     pageSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const table: ExportableTable = args.table;
+    const table = args.table;
     const pageSize = normalizePageSize(args.pageSize);
 
     return ctx.db.query(table).paginate({
