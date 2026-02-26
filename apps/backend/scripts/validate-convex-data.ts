@@ -1,5 +1,4 @@
 import { ConvexHttpClient } from "convex/browser";
-import { makeFunctionReference } from "convex/server";
 import type { ZodType } from "zod";
 
 import {
@@ -14,19 +13,15 @@ import {
   type ComponentMetadataDocument,
   type ComponentSearchDocument,
 } from "../../../shared/component-schema";
+import {
+  describeConvexSource,
+  fetchAllTableDocuments,
+  readStringField,
+  stripConvexSystemFields,
+  type AdminExportTable,
+} from "./shared";
 
-type SnapshotTable =
-  | "components"
-  | "componentCode"
-  | "componentFiles"
-  | "componentSearch"
-  | "componentEmbeddings";
-
-type PaginationResult<TDocument> = {
-  page: TDocument[];
-  isDone: boolean;
-  continueCursor: string;
-};
+type SnapshotTable = AdminExportTable;
 
 type CliOptions = {
   json: boolean;
@@ -41,10 +36,6 @@ type ValidationIssue = {
   message: string;
 };
 
-const DEFAULT_PAGE_SIZE = 200;
-
-const exportTablePage = makeFunctionReference<"query">("admin:exportTablePage");
-
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const convexUrl = process.env.CONVEX_URL;
@@ -55,11 +46,11 @@ async function main(): Promise<void> {
 
   const client = new ConvexHttpClient(convexUrl);
 
-  const rawMetadata = await fetchAllDocuments(client, "components");
-  const rawCode = await fetchAllDocuments(client, "componentCode");
-  const rawFiles = await fetchAllDocuments(client, "componentFiles");
-  const rawSearch = await fetchAllDocuments(client, "componentSearch");
-  const rawEmbeddings = await fetchAllDocuments(client, "componentEmbeddings");
+  const rawMetadata = await fetchAllTableDocuments(client, "components");
+  const rawCode = await fetchAllTableDocuments(client, "componentCode");
+  const rawFiles = await fetchAllTableDocuments(client, "componentFiles");
+  const rawSearch = await fetchAllTableDocuments(client, "componentSearch");
+  const rawEmbeddings = await fetchAllTableDocuments(client, "componentEmbeddings");
 
   const issues: ValidationIssue[] = [];
 
@@ -149,32 +140,6 @@ async function main(): Promise<void> {
   if (errorCount > 0) {
     process.exitCode = 1;
   }
-}
-
-async function fetchAllDocuments(
-  client: ConvexHttpClient,
-  table: SnapshotTable,
-): Promise<unknown[]> {
-  const documents: unknown[] = [];
-  let cursor: string | undefined;
-
-  while (true) {
-    const result = (await client.query(exportTablePage, {
-      table,
-      cursor,
-      pageSize: DEFAULT_PAGE_SIZE,
-    })) as PaginationResult<unknown>;
-
-    documents.push(...result.page);
-
-    if (result.isDone) {
-      break;
-    }
-
-    cursor = result.continueCursor;
-  }
-
-  return documents;
 }
 
 function validateRows<
@@ -475,33 +440,6 @@ function printIssues(issues: ValidationIssue[]): void {
   }
 }
 
-function stripConvexSystemFields(value: unknown): unknown {
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  const result: Record<string, unknown> = {};
-
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (key.startsWith("_")) {
-      continue;
-    }
-
-    result[key] = entryValue;
-  }
-
-  return result;
-}
-
-function readStringField(value: unknown, key: string): string | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const raw = value[key];
-  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
-}
-
 function formatZodIssue(path: PropertyKey[], message: string): string {
   if (path.length === 0) {
     return message;
@@ -523,25 +461,6 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   return options;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function describeConvexSource(convexUrl: string): "local" | "cloud" {
-  try {
-    const hostname = new URL(convexUrl).hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-      return "local";
-    }
-    return "cloud";
-  } catch {
-    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
-      return "local";
-    }
-    return "cloud";
-  }
 }
 
 await main().catch((error: unknown) => {

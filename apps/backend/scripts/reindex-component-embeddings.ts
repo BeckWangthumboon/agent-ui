@@ -10,14 +10,15 @@ import {
   EMBEDDING_MODEL,
   buildComponentEmbeddingText,
 } from "../../../shared/component-schema";
+import {
+  describeConvexSource,
+  fetchAllTableDocuments,
+  readStringField,
+  stripConvexSystemFields,
+  type AdminExportTable,
+} from "./shared";
 
-type SnapshotTable = "components" | "componentSearch" | "componentEmbeddings";
-
-type PaginationResult<TDocument> = {
-  page: TDocument[];
-  isDone: boolean;
-  continueCursor: string;
-};
+type SnapshotTable = Extract<AdminExportTable, "components" | "componentSearch" | "componentEmbeddings">;
 
 type ReindexOptions = {
   dryRun: boolean;
@@ -37,7 +38,6 @@ type EmbeddingPayload = {
 const DEFAULT_PAGE_SIZE = 200;
 const DEFAULT_BATCH_SIZE = 8;
 
-const exportTablePage = makeFunctionReference<"query">("admin:exportTablePage");
 const upsertManyEmbeddings = makeFunctionReference<"mutation">("embeddings:upsertMany");
 const deleteManyEmbeddings = makeFunctionReference<"mutation">("embeddings:deleteMany");
 
@@ -51,8 +51,8 @@ async function main(): Promise<void> {
 
   const client = new ConvexHttpClient(convexUrl);
 
-  const rawMetadataRows = await fetchAllDocuments(client, "components", options.pageSize);
-  const rawSearchRows = await fetchAllDocuments(client, "componentSearch", options.pageSize);
+  const rawMetadataRows = await fetchAllTableDocuments(client, "components", options.pageSize);
+  const rawSearchRows = await fetchAllTableDocuments(client, "componentSearch", options.pageSize);
 
   const metadataRows = parseRows(
     rawMetadataRows,
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   if (options.dryRun) {
     printDryRunPreview(prepared);
     if (options.prune && options.limit === undefined) {
-      const rawEmbeddingRows = await fetchAllDocuments(
+      const rawEmbeddingRows = await fetchAllTableDocuments(
         client,
         "componentEmbeddings",
         options.pageSize,
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
 
   let pruned = 0;
   if (options.prune && options.limit === undefined) {
-    const rawEmbeddingRows = await fetchAllDocuments(
+    const rawEmbeddingRows = await fetchAllTableDocuments(
       client,
       "componentEmbeddings",
       options.pageSize,
@@ -248,33 +248,6 @@ function parseArgs(rawArgs: string[]): ReindexOptions {
   };
 }
 
-async function fetchAllDocuments(
-  client: ConvexHttpClient,
-  table: SnapshotTable,
-  pageSize: number,
-): Promise<unknown[]> {
-  const documents: unknown[] = [];
-  let cursor: string | undefined;
-
-  while (true) {
-    const result = (await client.query(exportTablePage, {
-      table,
-      cursor,
-      pageSize,
-    })) as PaginationResult<unknown>;
-
-    documents.push(...result.page);
-
-    if (result.isDone) {
-      break;
-    }
-
-    cursor = result.continueCursor;
-  }
-
-  return documents;
-}
-
 function parseRows<
   TDocument extends { [key in TIdKey]: string },
   TIdKey extends "id" | "componentId",
@@ -291,7 +264,7 @@ function parseRows<
       continue;
     }
 
-    const candidateId = readStringField(normalized, idField);
+    const candidateId = readStringField(normalized, idField, { trim: true });
     for (const issue of parsed.error.issues) {
       errors.push(formatParseIssue(table, candidateId, issue.path, issue.message));
     }
@@ -307,31 +280,6 @@ function parseRows<
   }
 
   return parsedRows;
-}
-
-function stripConvexSystemFields(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>).filter(
-    ([key]) => key !== "_id" && key !== "_creationTime",
-  );
-  return Object.fromEntries(entries);
-}
-
-function readStringField(value: unknown, key: string): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const candidate = (value as Record<string, unknown>)[key];
-  if (typeof candidate !== "string") {
-    return undefined;
-  }
-
-  const trimmed = candidate.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function formatParseIssue(
@@ -482,21 +430,6 @@ function chunked<TValue>(values: TValue[], size: number): TValue[][] {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
-}
-
-function describeConvexSource(convexUrl: string): "local" | "cloud" {
-  try {
-    const hostname = new URL(convexUrl).hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-      return "local";
-    }
-    return "cloud";
-  } catch {
-    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
-      return "local";
-    }
-    return "cloud";
-  }
 }
 
 main().catch((error) => {

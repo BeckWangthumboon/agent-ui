@@ -1,13 +1,12 @@
 import { ConvexHttpClient } from "convex/browser";
-import { makeFunctionReference } from "convex/server";
 
 import { ComponentMetadataDocumentSchema } from "../../../shared/component-schema";
-
-type PaginationResult<TDocument> = {
-  page: TDocument[];
-  isDone: boolean;
-  continueCursor: string;
-};
+import {
+  describeConvexSource,
+  fetchAllTableDocuments,
+  readStringField,
+  stripConvexSystemFields,
+} from "./shared";
 
 type CliOptions = {
   json: boolean;
@@ -19,9 +18,6 @@ type MissingInstallRow = {
   sourceUrl: string;
   sourceLibrary?: string;
 };
-
-const DEFAULT_PAGE_SIZE = 200;
-const exportTablePage = makeFunctionReference<"query">("admin:exportTablePage");
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
@@ -104,26 +100,7 @@ async function main(): Promise<void> {
 }
 
 async function fetchAllComponents(client: ConvexHttpClient): Promise<unknown[]> {
-  const rows: unknown[] = [];
-  let cursor: string | undefined;
-
-  while (true) {
-    const result: PaginationResult<unknown> = await client.query(exportTablePage, {
-      table: "components",
-      cursor,
-      pageSize: DEFAULT_PAGE_SIZE,
-    });
-
-    rows.push(...result.page);
-
-    if (result.isDone) {
-      break;
-    }
-
-    cursor = result.continueCursor;
-  }
-
-  return rows;
+  return fetchAllTableDocuments(client, "components");
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -141,52 +118,6 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   return options;
-}
-
-function stripConvexSystemFields(value: unknown): unknown {
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  const result: Record<string, unknown> = {};
-
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (key.startsWith("_")) {
-      continue;
-    }
-
-    result[key] = entryValue;
-  }
-
-  return result;
-}
-
-function readStringField(value: unknown, key: string): string | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const raw = value[key];
-  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function describeConvexSource(convexUrl: string): "local" | "cloud" {
-  try {
-    const hostname = new URL(convexUrl).hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-      return "local";
-    }
-    return "cloud";
-  } catch {
-    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
-      return "local";
-    }
-    return "cloud";
-  }
 }
 
 await main();
