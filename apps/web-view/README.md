@@ -20,7 +20,7 @@ This app is a Vite SPA using TanStack Router (file-based routes), Tailwind CSS v
 
 ## Backend Integration
 
-- Set `VITE_CONVEX_URL` in `apps/web/.env.local` (typically the same value as `CONVEX_URL` in `apps/backend/.env.local`)
+- Set `VITE_CONVEX_URL` in `apps/web-view/.env.local` (typically the same value as `CONVEX_URL` in `apps/backend/.env.local`)
 - Web imports backend generated API types directly from `apps/backend/convex/_generated/api`
 
 ## shadcn/ui

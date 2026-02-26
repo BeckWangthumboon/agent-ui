@@ -29,7 +29,7 @@ export default defineConfig([
     },
   },
   {
-    files: ["apps/web/**/*.{ts,tsx}"],
+    files: ["apps/web-view/**/*.{ts,tsx}"],
     extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     languageOptions: {
       globals: {
@@ -38,13 +38,13 @@ export default defineConfig([
     },
   },
   {
-    files: ["apps/web/src/components/ui/**/*.tsx"],
+    files: ["apps/web-view/src/components/ui/**/*.tsx"],
     rules: {
       "react-refresh/only-export-components": "off",
     },
   },
   {
-    files: ["apps/web/src/routes/**/*.{ts,tsx}"],
+    files: ["apps/web-view/src/routes/**/*.{ts,tsx}"],
     rules: {
       "react-refresh/only-export-components": "off",
     },

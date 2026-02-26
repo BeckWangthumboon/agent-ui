@@ -32,7 +32,7 @@
     "apps/cli": {
       "name": "@agent-ui/cli",
     },
-    "apps/web": {
+    "apps/web-view": {
       "name": "@agent-ui/web",
       "version": "0.0.0",
       "dependencies": {
@@ -73,7 +73,7 @@
 
     "@agent-ui/cli": ["@agent-ui/cli@workspace:apps/cli"],
 
-    "@agent-ui/web": ["@agent-ui/web@workspace:apps/web"],
+    "@agent-ui/web": ["@agent-ui/web@workspace:apps/web-view"],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
