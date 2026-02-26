@@ -1,4 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
 
 import {
   componentCodeFields,
@@ -7,7 +8,17 @@ import {
   componentSearchFields,
 } from "./validators";
 
+const userFields = {
+  authId: v.string(),
+  email: v.string(),
+  firstName: v.optional(v.string()),
+  lastName: v.optional(v.string()),
+  profilePictureUrl: v.optional(v.string()),
+  updatedAt: v.number(),
+};
+
 export default defineSchema({
+  users: defineTable(userFields).index("by_authId", ["authId"]).index("by_email", ["email"]),
   components: defineTable(componentMetadataFields)
     .index("by_component_id", ["id"])
     .index("by_framework", ["framework"])

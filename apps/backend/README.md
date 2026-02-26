@@ -2,6 +2,13 @@
 
 This workspace owns Convex schema and backend functions.
 
+## Required auth env vars
+
+WorkOS auth/account bootstrap requires these variables in `apps/backend/.env.local`:
+
+- `WORKOS_CLIENT_ID` (WorkOS client/application ID used by Convex auth provider config)
+- `WORKOS_API_KEY` (server-side key used to fetch/sync user profile data)
+
 ## Commands
 
 - `bun run --cwd apps/backend dev` - start Convex dev, generate local project wiring.
