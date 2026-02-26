@@ -18,30 +18,21 @@ type SplitComponentRecords = Awaited<ReturnType<typeof buildSplitComponentRecord
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
 
-async function findSearchByComponentId(
-  ctx: MutationCtx,
-  componentId: string,
-) {
+async function findSearchByComponentId(ctx: MutationCtx, componentId: string) {
   return ctx.db
     .query("componentSearch")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .unique();
 }
 
-async function findEmbeddingsByComponentId(
-  ctx: MutationCtx,
-  componentId: string,
-) {
+async function findEmbeddingsByComponentId(ctx: MutationCtx, componentId: string) {
   return ctx.db
     .query("componentEmbeddings")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
     .collect();
 }
 
-async function findFilesByComponentId(
-  ctx: MutationCtx,
-  componentId: string,
-) {
+async function findFilesByComponentId(ctx: MutationCtx, componentId: string) {
   return ctx.db
     .query("componentFiles")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("componentId", componentId))
@@ -71,10 +62,7 @@ async function findExampleFilesByComponentId(ctx: MutationCtx, componentId: stri
     .collect();
 }
 
-async function upsertSplitRecords(
-  ctx: MutationCtx,
-  records: SplitComponentRecords,
-) {
+async function upsertSplitRecords(ctx: MutationCtx, records: SplitComponentRecords) {
   const [existingMetadata, existingCode, existingFiles, existingSearch] = await Promise.all([
     findMetadataByComponentId(ctx, records.metadata.id),
     findCodeByComponentId(ctx, records.code.componentId),
@@ -140,10 +128,7 @@ async function upsertSplitRecords(
   };
 }
 
-async function deleteComponentRowsById(
-  ctx: MutationCtx,
-  componentId: string,
-) {
+async function deleteComponentRowsById(ctx: MutationCtx, componentId: string) {
   const [metadata, code, files, search, embeddings] = await Promise.all([
     findMetadataByComponentId(ctx, componentId),
     findCodeByComponentId(ctx, componentId),

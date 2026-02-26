@@ -42,9 +42,13 @@
     "format:check:cli:quiet": "bunx prettier apps/cli --check --log-level silent",
     "data:pull": "bun run --env-file apps/backend/.env.local --cwd apps/backend pull",
     "data:create": "bun run --env-file apps/backend/.env.local scripts/changesets/create-from-local.ts",
-    "data:validate": "bun run --env-file apps/backend/.env.local scripts/changesets/validate.ts",
+    "data:changeset:validate": "bun run --env-file apps/backend/.env.local scripts/changesets/validate.ts",
     "data:diff": "bun run --env-file apps/backend/.env.local scripts/changesets/diff.ts",
-    "data:publish": "bun run --env-file apps/backend/.env.local scripts/changesets/publish.ts"
+    "data:publish": "bun run --env-file apps/backend/.env.local scripts/changesets/publish.ts",
+    "data:reindex": "bun run --cwd apps/backend reindex:embeddings",
+    "data:validate": "bun run --cwd apps/backend validate:data",
+    "data:validate:json": "bun run --cwd apps/backend validate:data --json",
+    "data:check": "bun run data:pull && bun run data:validate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

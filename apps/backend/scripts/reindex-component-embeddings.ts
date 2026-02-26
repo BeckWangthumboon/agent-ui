@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(`Source deployment: ${convexUrl}`);
+  console.log(`Source: ${describeConvexSource(convexUrl)}`);
   console.log(`Embedding model: ${EMBEDDING_MODEL} (${EMBEDDING_DIMENSIONS} dims)`);
   console.log(
     `Prepared ${prepared.length} components from ${metadataRows.length} metadata rows and ${searchRows.length} search rows`,
@@ -482,6 +482,21 @@ function chunked<TValue>(values: TValue[], size: number): TValue[][] {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 main().catch((error) => {

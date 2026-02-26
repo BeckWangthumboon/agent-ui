@@ -3,17 +3,24 @@ import { makeFunctionReference } from "convex/server";
 import type { ZodType } from "zod";
 
 import {
+  ComponentEmbeddingDocumentSchema,
   ComponentFileDocumentSchema,
   ComponentCodeDocumentSchema,
   ComponentMetadataDocumentSchema,
   ComponentSearchDocumentSchema,
+  type ComponentEmbeddingDocument,
   type ComponentFileDocument,
   type ComponentCodeDocument,
   type ComponentMetadataDocument,
   type ComponentSearchDocument,
 } from "../../../shared/component-schema";
 
-type SnapshotTable = "components" | "componentCode" | "componentFiles" | "componentSearch";
+type SnapshotTable =
+  | "components"
+  | "componentCode"
+  | "componentFiles"
+  | "componentSearch"
+  | "componentEmbeddings";
 
 type PaginationResult<TDocument> = {
   page: TDocument[];
@@ -52,6 +59,7 @@ async function main(): Promise<void> {
   const rawCode = await fetchAllDocuments(client, "componentCode");
   const rawFiles = await fetchAllDocuments(client, "componentFiles");
   const rawSearch = await fetchAllDocuments(client, "componentSearch");
+  const rawEmbeddings = await fetchAllDocuments(client, "componentEmbeddings");
 
   const issues: ValidationIssue[] = [];
 
@@ -83,28 +91,37 @@ async function main(): Promise<void> {
     "componentId",
     issues,
   );
+  const embeddings = validateRows(
+    rawEmbeddings,
+    "componentEmbeddings",
+    ComponentEmbeddingDocumentSchema,
+    "componentId",
+    issues,
+  );
 
-  validateCrossTableIntegrity(metadata, code, fileRows, search, issues);
+  validateCrossTableIntegrity(metadata, code, fileRows, search, embeddings, issues);
+  validateContentCompleteness(metadata, fileRows, search, issues);
 
   const warningCount = issues.filter((issue) => issue.level === "warning").length;
   const errorCount = issues.filter((issue) => issue.level === "error").length;
 
   const summary = {
     source: {
-      convexUrl,
-      convexDeployment: process.env.CONVEX_DEPLOYMENT ?? null,
+      kind: describeConvexSource(convexUrl),
     },
     counts: {
       components: rawMetadata.length,
       componentCode: rawCode.length,
       componentFiles: rawFiles.length,
       componentSearch: rawSearch.length,
+      componentEmbeddings: rawEmbeddings.length,
     },
     validRows: {
       components: metadata.length,
       componentCode: code.length,
       componentFiles: fileRows.length,
       componentSearch: search.length,
+      componentEmbeddings: embeddings.length,
     },
     warningCount,
     errorCount,
@@ -114,12 +131,12 @@ async function main(): Promise<void> {
   if (options.json) {
     console.log(JSON.stringify(summary, null, 2));
   } else {
-    console.log(`Validated Convex deployment: ${convexUrl}`);
+    console.log(`Validated Convex source: ${summary.source.kind}`);
     console.log(
-      `Rows: components=${summary.counts.components}, componentCode=${summary.counts.componentCode}, componentFiles=${summary.counts.componentFiles}, componentSearch=${summary.counts.componentSearch}`,
+      `Rows: components=${summary.counts.components}, componentCode=${summary.counts.componentCode}, componentFiles=${summary.counts.componentFiles}, componentSearch=${summary.counts.componentSearch}, componentEmbeddings=${summary.counts.componentEmbeddings}`,
     );
     console.log(
-      `Valid rows: components=${summary.validRows.components}, componentCode=${summary.validRows.componentCode}, componentFiles=${summary.validRows.componentFiles}, componentSearch=${summary.validRows.componentSearch}`,
+      `Valid rows: components=${summary.validRows.components}, componentCode=${summary.validRows.componentCode}, componentFiles=${summary.validRows.componentFiles}, componentSearch=${summary.validRows.componentSearch}, componentEmbeddings=${summary.validRows.componentEmbeddings}`,
     );
     console.log(`Warnings: ${warningCount}`);
     console.log(`Errors: ${errorCount}`);
@@ -245,11 +262,13 @@ function validateCrossTableIntegrity(
   codeRows: ComponentCodeDocument[],
   fileRows: ComponentFileDocument[],
   searchRows: ComponentSearchDocument[],
+  embeddingRows: ComponentEmbeddingDocument[],
   issues: ValidationIssue[],
 ): void {
   const metadataIds = new Set(metadataRows.map((row) => row.id));
   const codeByComponentId = new Map(codeRows.map((row) => [row.componentId, row]));
   const searchByComponentId = new Map(searchRows.map((row) => [row.componentId, row]));
+  const embeddingByComponentId = new Map(embeddingRows.map((row) => [row.componentId, row]));
   const filesByComponentId = new Map<string, ComponentFileDocument[]>();
 
   for (const fileRow of fileRows) {
@@ -277,6 +296,15 @@ function validateCrossTableIntegrity(
         table: "components",
         componentId: metadataId,
         message: "Missing related row in componentSearch table",
+      });
+    }
+
+    if (!embeddingByComponentId.has(metadataId)) {
+      issues.push({
+        level: "error",
+        table: "components",
+        componentId: metadataId,
+        message: "Missing related row in componentEmbeddings table",
       });
     }
   }
@@ -358,6 +386,85 @@ function validateCrossTableIntegrity(
       });
     }
   }
+
+  for (const embeddingRow of embeddingRows) {
+    if (!metadataIds.has(embeddingRow.componentId)) {
+      issues.push({
+        level: "error",
+        table: "componentEmbeddings",
+        componentId: embeddingRow.componentId,
+        message: "Orphan row: no matching components.id",
+      });
+    }
+  }
+}
+
+function validateContentCompleteness(
+  metadataRows: ComponentMetadataDocument[],
+  fileRows: ComponentFileDocument[],
+  searchRows: ComponentSearchDocument[],
+  issues: ValidationIssue[],
+): void {
+  const filesByComponentId = new Map<string, ComponentFileDocument[]>();
+  const searchByComponentId = new Map(searchRows.map((row) => [row.componentId, row]));
+
+  for (const fileRow of fileRows) {
+    const files = filesByComponentId.get(fileRow.componentId);
+    if (files) {
+      files.push(fileRow);
+    } else {
+      filesByComponentId.set(fileRow.componentId, [fileRow]);
+    }
+  }
+
+  for (const metadataRow of metadataRows) {
+    const componentId = metadataRow.id;
+
+    if (!metadataRow.install) {
+      issues.push({
+        level: "warning",
+        table: "components",
+        componentId,
+        message: "Missing install metadata",
+      });
+    }
+
+    const files = filesByComponentId.get(componentId) ?? [];
+    const hasExample = files.some((row) => row.kind === "example");
+    if (!hasExample) {
+      issues.push({
+        level: "warning",
+        table: "componentFiles",
+        componentId,
+        message: "Missing canonical example file row (kind='example')",
+      });
+    }
+
+    const search = searchByComponentId.get(componentId);
+    if (!search) {
+      continue;
+    }
+
+    const missingSearchFields: string[] = [];
+    if (search.capabilities.length === 0) {
+      missingSearchFields.push("capabilities");
+    }
+    if (search.synonyms.length === 0) {
+      missingSearchFields.push("synonyms");
+    }
+    if (search.topics.length === 0) {
+      missingSearchFields.push("topics");
+    }
+
+    if (missingSearchFields.length > 0) {
+      issues.push({
+        level: "warning",
+        table: "componentSearch",
+        componentId,
+        message: `Missing embedding metadata fields: ${missingSearchFields.join(", ")}`,
+      });
+    }
+  }
 }
 
 function printIssues(issues: ValidationIssue[]): void {
@@ -420,6 +527,21 @@ function parseArgs(argv: string[]): CliOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 await main().catch((error: unknown) => {

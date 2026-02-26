@@ -5,6 +5,8 @@ This project uses two related shapes:
 - Local source shape: `data/components/<id>/meta.json` (`schemaVersion: 2`)
 - Backend storage shape: split Convex tables (`schemaVersion: 4/5`)
 
+Annotation authoring rules live in `docs/component-annotations.md`.
+
 ## Current data flow (Convex-first + changesets)
 
 1. Edit local component docs in `data/components/<id>/meta.json`.
@@ -14,18 +16,19 @@ This project uses two related shapes:
    - Add `-- --prune` to include delete operations for live component ids missing locally.
    - Use `-- --mode full` to force a full desired-state upsert changeset.
 3. Validate the changeset:
-   - `bun run data:validate -- --changeset data/changesets/<id>.json`
+   - `bun run data:changeset:validate -- --changeset data/changesets/<id>.json`
 4. Diff against live Convex data:
    - `bun run data:diff -- --changeset data/changesets/<id>.json`
 5. Publish to Convex:
    - `bun run data:publish -- --changeset data/changesets/<id>.json`
-6. Optional live integrity/sync scripts:
-   - `bun run --cwd apps/backend validate:data`
+6. Live integrity/sync scripts:
    - `bun run data:pull`
+   - `bun run data:validate`
+   - `bun run data:check` (runs pull + validate)
 
 ## Source of truth
 
-- Live Convex data (`components`, `componentCode`, `componentFiles`, `componentSearch`) is the runtime source of truth.
+- Live Convex data (`components`, `componentCode`, `componentFiles`, `componentSearch`, `componentEmbeddings`) is the runtime source of truth.
 - Local `data/components/` files are an editable source that can be materialized into a changeset.
 
 ## Changeset format (`data/changesets/*.json`)

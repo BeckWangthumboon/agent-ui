@@ -65,7 +65,9 @@ async function main(): Promise<void> {
     console.log(
       JSON.stringify(
         {
-          convexUrl,
+          source: {
+            kind: describeConvexSource(convexUrl),
+          },
           totalComponents: rows.length,
           missingInstallCount: missing.length,
           parseErrorCount: parseErrors.length,
@@ -77,7 +79,7 @@ async function main(): Promise<void> {
       ),
     );
   } else {
-    console.log(`Convex source: ${convexUrl}`);
+    console.log(`Convex source: ${describeConvexSource(convexUrl)}`);
     console.log(`Total components: ${rows.length}`);
     console.log(`Missing install metadata: ${missing.length}`);
 
@@ -170,6 +172,21 @@ function readStringField(value: unknown, key: string): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 await main();

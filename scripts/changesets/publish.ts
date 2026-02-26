@@ -22,7 +22,7 @@ type PublishResult = {
   changesetPath: string;
   changesetId: string;
   dryRun: boolean;
-  convexUrl: string;
+  convexSource: "local" | "cloud";
   validationIssues: ValidationIssue[];
   operationCount: number;
   upsertCount: number;
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     changesetPath,
     changesetId: parsed.changeset.id,
     dryRun: options.dryRun,
-    convexUrl,
+    convexSource: describeConvexSource(convexUrl),
     validationIssues: parsed.issues,
     operationCount: parsed.resolvedOperations.length,
     upsertCount,
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 
   console.log(`${options.dryRun ? "Dry run" : "Published"} changeset: ${parsed.changeset.id}`);
   console.log(`Path: ${toDisplayPath(changesetPath)}`);
-  console.log(`Convex: ${convexUrl}`);
+  console.log(`Convex source: ${output.convexSource}`);
   if (parsed.issues.length > 0) {
     for (const line of formatValidationIssues(parsed.issues)) {
       console.log(line);
@@ -150,6 +150,21 @@ function printHelp(): void {
   console.log("  --changeset <path>   Changeset file path (default: latest in data/changesets)");
   console.log("  --dry-run            Validate only; do not apply mutations");
   console.log("  --json               Output machine-readable JSON");
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 main().catch((error) => {

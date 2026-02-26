@@ -41,6 +41,6 @@ data
 .agents/skills/*
 
 # allow specific skills
-!.agents/skills/component-ingest/
+!.agents/skills/component-data/
 !.agents/skills/convex-*/
 !.agents/skills/vercel-react-best-practices

@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const changesetPath = await resolveChangesetPath(options.changesetPath);
   const parsed = await parseAndValidateChangeset(changesetPath);
   if (hasValidationErrors(parsed.issues)) {
-    throw new Error("Changeset validation failed. Run data:validate for details.");
+    throw new Error("Changeset validation failed. Run data:changeset:validate for details.");
   }
 
   const client = new ConvexHttpClient(convexUrl);
@@ -44,11 +44,12 @@ async function main(): Promise<void> {
   }
 
   const summary = await diffChangesetAgainstSnapshot(parsed.resolvedOperations, snapshot);
+  const convexSource = describeConvexSource(convexUrl);
 
   const output = {
     changesetPath,
     changesetId: parsed.changeset.id,
-    convexUrl,
+    convexSource,
     summary,
   };
 
@@ -59,7 +60,7 @@ async function main(): Promise<void> {
 
   console.log(`Changeset: ${parsed.changeset.id}`);
   console.log(`Path: ${toDisplayPath(changesetPath)}`);
-  console.log(`Convex: ${convexUrl}`);
+  console.log(`Convex source: ${convexSource}`);
   printDiffSummary(summary);
 }
 
@@ -107,6 +108,21 @@ function printHelp(): void {
   console.log("Options:");
   console.log("  --changeset <path>   Changeset file path (default: latest in data/changesets)");
   console.log("  --json               Output machine-readable JSON");
+}
+
+function describeConvexSource(convexUrl: string): "local" | "cloud" {
+  try {
+    const hostname = new URL(convexUrl).hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return "local";
+    }
+    return "cloud";
+  } catch {
+    if (convexUrl.includes("localhost") || convexUrl.includes("127.0.0.1")) {
+      return "local";
+    }
+    return "cloud";
+  }
 }
 
 main().catch((error) => {
