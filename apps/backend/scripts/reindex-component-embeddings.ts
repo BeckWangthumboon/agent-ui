@@ -17,8 +17,12 @@ import {
   stripConvexSystemFields,
   type AdminExportTable,
 } from "./shared";
+import { createEmbedding, createEmbeddingClient } from "./lib/embeddings";
 
-type SnapshotTable = Extract<AdminExportTable, "components" | "componentSearch" | "componentEmbeddings">;
+type SnapshotTable = Extract<
+  AdminExportTable,
+  "components" | "componentSearch" | "componentEmbeddings"
+>;
 
 type ReindexOptions = {
   dryRun: boolean;
@@ -313,44 +317,13 @@ async function createEmbeddingProvider(
     );
   }
 
-  const baseUrl = (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
-  return async (input: string) => fetchOpenAiEmbedding(apiKey, baseUrl, input);
-}
-
-async function fetchOpenAiEmbedding(
-  apiKey: string,
-  baseUrl: string,
-  input: string,
-): Promise<number[]> {
-  const response = await fetch(`${baseUrl}/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  const client = createEmbeddingClient(apiKey, process.env.OPENAI_BASE_URL);
+  return async (input: string) =>
+    createEmbedding(client, {
       model: EMBEDDING_MODEL,
       input,
       dimensions: EMBEDDING_DIMENSIONS,
-      encoding_format: "float",
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI embeddings request failed (${response.status}): ${body.slice(0, 400)}`);
-  }
-
-  const payload = (await response.json()) as {
-    data?: Array<{ embedding?: unknown }>;
-  };
-  const embedding = payload.data?.[0]?.embedding;
-
-  if (!Array.isArray(embedding)) {
-    throw new Error("OpenAI embeddings response did not include a valid vector.");
-  }
-
-  return embedding.map((value) => Number(value));
+    });
 }
 
 function validateEmbeddingVector(componentId: string, embedding: number[]): void {

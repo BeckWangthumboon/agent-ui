@@ -13,6 +13,7 @@ import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
 } from "./validators";
+import { createEmbedding, createEmbeddingClientFromEnv } from "./lib/embeddings";
 
 type SearchRecord = Doc<"componentSearch">;
 type ComponentRecord = Doc<"components">;
@@ -353,41 +354,12 @@ function validateEmbeddingVector(embedding: number[]): void {
 }
 
 async function fetchQueryEmbedding(query: string) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for semantic retrieval.");
-  }
-
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-  const response = await fetch(`${baseUrl}/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: query,
-      dimensions: EMBEDDING_DIMENSIONS,
-      encoding_format: "float",
-    }),
+  const client = createEmbeddingClientFromEnv("semantic retrieval");
+  const normalizedEmbedding = await createEmbedding(client, {
+    model: EMBEDDING_MODEL,
+    input: query,
+    dimensions: EMBEDDING_DIMENSIONS,
   });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI embeddings request failed (${response.status}): ${body.slice(0, 400)}`);
-  }
-
-  const payload = (await response.json()) as {
-    data?: Array<{ embedding?: unknown }>;
-  };
-  const embedding = payload.data?.[0]?.embedding;
-  if (!Array.isArray(embedding)) {
-    throw new Error("OpenAI embeddings response did not include a valid vector.");
-  }
-
-  const normalizedEmbedding = embedding.map((value) => Number(value));
   validateEmbeddingVector(normalizedEmbedding);
   return normalizedEmbedding;
 }
