@@ -1,6 +1,7 @@
-import { query } from "./_generated/server";
+import { action, internalQuery, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
 import {
@@ -9,6 +10,8 @@ import {
   ComponentMotionValidator,
   ComponentPrimitiveLibraryValidator,
   ComponentStylingValidator,
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_MODEL,
 } from "./validators";
 
 type SearchRecord = Doc<"componentSearch">;
@@ -63,6 +66,37 @@ type ComponentFilters = {
   animationLibrary?: ComponentRecord["animationLibrary"];
 };
 
+type SemanticCandidate = {
+  componentId: string;
+  semanticRank: number;
+};
+
+const ComponentFiltersValidator = v.object({
+  framework: v.optional(ComponentFrameworkValidator),
+  styling: v.optional(ComponentStylingValidator),
+  motion: v.optional(v.array(ComponentMotionValidator)),
+  primitiveLibrary: v.optional(v.array(ComponentPrimitiveLibraryValidator)),
+  animationLibrary: v.optional(ComponentAnimationLibraryValidator),
+});
+
+const DEFAULT_SEMANTIC_LIMIT = 15;
+const MAX_SEMANTIC_LIMIT = 50;
+const MIN_VECTOR_SEARCH_WINDOW = 30;
+const MAX_VECTOR_SEARCH_WINDOW = 200;
+const VECTOR_SEARCH_MULTIPLIER = 3;
+
+const componentIdsByFiltersInternalRef = makeFunctionReference<
+  "query",
+  { filters?: ComponentFilters },
+  string[]
+>("search:componentIdsByFiltersInternal");
+
+const resolveEmbeddingComponentIdsInternalRef = makeFunctionReference<
+  "query",
+  { embeddingIds: Array<Id<"componentEmbeddings">> },
+  Array<string | null>
+>("search:resolveEmbeddingComponentIdsInternal");
+
 type SeedQuery =
   | {
       kind: "primitiveLibraryAndMotion";
@@ -105,7 +139,7 @@ function toSearchCandidate(
   };
 }
 
-async function findComponentById(ctx: QueryCtx, id: string): Promise<ComponentRecord | null> {
+async function findComponentById(ctx: QueryCtx, id: string) {
   const exact = await ctx.db
     .query("components")
     .withIndex("by_component_id", (indexQuery) => indexQuery.eq("id", id))
@@ -173,7 +207,7 @@ function selectSeedQuery(filters: ComponentFilters): SeedQuery {
   return { kind: "all" };
 }
 
-async function executeSeedQuery(ctx: QueryCtx, seedQuery: SeedQuery): Promise<ComponentRecord[]> {
+async function executeSeedQuery(ctx: QueryCtx, seedQuery: SeedQuery) {
   switch (seedQuery.kind) {
     case "primitiveLibraryAndMotion":
       return ctx.db
@@ -259,14 +293,103 @@ function matchesAllFilters(component: ComponentRecord, filters: ComponentFilters
   return true;
 }
 
-async function queryComponentsByFilters(
-  ctx: QueryCtx,
-  filters: ComponentFilters,
-): Promise<ComponentRecord[]> {
+async function queryComponentsByFilters(ctx: QueryCtx, filters: ComponentFilters) {
   const seedQuery = selectSeedQuery(filters);
   const candidates = await executeSeedQuery(ctx, seedQuery);
 
   return candidates.filter((component) => matchesAllFilters(component, filters));
+}
+
+function hasAnyFilters(filters: ComponentFilters | undefined): boolean {
+  if (!filters) {
+    return false;
+  }
+
+  return (
+    filters.framework !== undefined ||
+    filters.styling !== undefined ||
+    (filters.motion?.length ?? 0) > 0 ||
+    (filters.primitiveLibrary?.length ?? 0) > 0 ||
+    filters.animationLibrary !== undefined
+  );
+}
+
+function normalizeSemanticLimit(limit: number | undefined): number {
+  if (limit === undefined) {
+    return DEFAULT_SEMANTIC_LIMIT;
+  }
+
+  if (!Number.isFinite(limit)) {
+    throw new Error("Semantic limit must be a finite number.");
+  }
+
+  const normalizedLimit = Math.floor(limit);
+  if (normalizedLimit <= 0) {
+    throw new Error("Semantic limit must be a positive integer.");
+  }
+
+  return Math.min(normalizedLimit, MAX_SEMANTIC_LIMIT);
+}
+
+function toVectorSearchWindow(limit: number): number {
+  return Math.min(
+    Math.max(limit * VECTOR_SEARCH_MULTIPLIER, MIN_VECTOR_SEARCH_WINDOW),
+    MAX_VECTOR_SEARCH_WINDOW,
+  );
+}
+
+function validateEmbeddingVector(embedding: number[]): void {
+  if (embedding.length !== EMBEDDING_DIMENSIONS) {
+    throw new Error(
+      `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, received ${embedding.length}`,
+    );
+  }
+
+  for (const [index, value] of embedding.entries()) {
+    if (!Number.isFinite(value)) {
+      throw new Error(`Embedding value at index ${index} is not finite`);
+    }
+  }
+}
+
+async function fetchQueryEmbedding(query: string) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for semantic retrieval.");
+  }
+
+  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const response = await fetch(`${baseUrl}/embeddings`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: EMBEDDING_MODEL,
+      input: query,
+      dimensions: EMBEDDING_DIMENSIONS,
+      encoding_format: "float",
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI embeddings request failed (${response.status}): ${body.slice(0, 400)}`);
+  }
+
+  const payload = (await response.json()) as {
+    data?: Array<{ embedding?: unknown }>;
+  };
+  const embedding = payload.data?.[0]?.embedding;
+  if (!Array.isArray(embedding)) {
+    throw new Error("OpenAI embeddings response did not include a valid vector.");
+  }
+
+  const normalizedEmbedding = embedding.map((value) => Number(value));
+  validateEmbeddingVector(normalizedEmbedding);
+  return normalizedEmbedding;
 }
 
 function toViewCodeFiles(
@@ -284,7 +407,7 @@ async function toViewComponent(
   component: ComponentRecord,
   includeCode: boolean,
   includeExample: boolean,
-): Promise<ViewComponent> {
+) {
   const [code, fileRecords] = await Promise.all([
     ctx.db
       .query("componentCode")
@@ -342,15 +465,7 @@ async function toViewComponent(
 export const componentsQuery = query({
   args: {
     query: v.string(),
-    filters: v.optional(
-      v.object({
-        framework: v.optional(ComponentFrameworkValidator),
-        styling: v.optional(ComponentStylingValidator),
-        motion: v.optional(v.array(ComponentMotionValidator)),
-        primitiveLibrary: v.optional(v.array(ComponentPrimitiveLibraryValidator)),
-        animationLibrary: v.optional(ComponentAnimationLibraryValidator),
-      }),
-    ),
+    filters: v.optional(ComponentFiltersValidator),
   },
   handler: async (ctx, args) => {
     const normalizedQuery = args.query.trim();
@@ -369,6 +484,93 @@ export const componentsQuery = query({
     return componentsFromIndex.map((component) =>
       toSearchCandidate(component, searchByComponentId.get(component.id)),
     );
+  },
+});
+
+export const componentIdsByFiltersInternal = internalQuery({
+  args: {
+    filters: v.optional(ComponentFiltersValidator),
+  },
+  handler: async (ctx, args) => {
+    const filters = args.filters ?? {};
+    const components = await queryComponentsByFilters(ctx, filters);
+    return components.map((component) => component.id);
+  },
+});
+
+export const resolveEmbeddingComponentIdsInternal = internalQuery({
+  args: {
+    embeddingIds: v.array(v.id("componentEmbeddings")),
+  },
+  handler: async (ctx, args) => {
+    if (args.embeddingIds.length === 0) {
+      return [];
+    }
+
+    const rows = await Promise.all(args.embeddingIds.map((embeddingId) => ctx.db.get(embeddingId)));
+    return rows.map((row) => row?.componentId ?? null);
+  },
+});
+
+export const semanticSearch = action({
+  args: {
+    query: v.string(),
+    filters: v.optional(ComponentFiltersValidator),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const normalizedQuery = args.query.trim();
+    if (normalizedQuery.length === 0) {
+      throw new Error("Search query must be non-empty.");
+    }
+
+    const semanticLimit = normalizeSemanticLimit(args.limit);
+    const queryEmbedding = await fetchQueryEmbedding(normalizedQuery);
+    const vectorSearchWindow = toVectorSearchWindow(semanticLimit);
+    const vectorHits = await ctx.vectorSearch("componentEmbeddings", "by_embedding", {
+      vector: queryEmbedding,
+      limit: vectorSearchWindow,
+    });
+
+    const embeddingIds = vectorHits.map((hit) => hit._id);
+    const componentIdsByHit = await ctx.runQuery(resolveEmbeddingComponentIdsInternalRef, {
+      embeddingIds,
+    });
+
+    const allowedComponentIds = hasAnyFilters(args.filters)
+      ? new Set(
+          await ctx.runQuery(componentIdsByFiltersInternalRef, {
+            filters: args.filters,
+          }),
+        )
+      : null;
+
+    const seenComponentIds = new Set<string>();
+    const candidates: SemanticCandidate[] = [];
+
+    for (const componentId of componentIdsByHit) {
+      if (!componentId) {
+        continue;
+      }
+      if (allowedComponentIds && !allowedComponentIds.has(componentId)) {
+        continue;
+      }
+      if (seenComponentIds.has(componentId)) {
+        continue;
+      }
+
+      seenComponentIds.add(componentId);
+      candidates.push({
+        componentId,
+        semanticRank: candidates.length + 1,
+      });
+
+      if (candidates.length >= semanticLimit) {
+        break;
+      }
+    }
+
+    return candidates;
   },
 });
 
