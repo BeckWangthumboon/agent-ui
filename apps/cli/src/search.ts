@@ -41,7 +41,27 @@ type SearchCandidate = Pick<
   | "animationLibrary"
 >;
 
+type SemanticCandidate = {
+  componentId: string;
+  semanticRank: number;
+};
+
+type HybridReason = "lexical" | "semantic" | "both";
+
+type HybridMergedResult = {
+  id: string;
+  reason: HybridReason;
+  score: number;
+  lexicalRank?: number;
+  semanticRank?: number;
+};
+
 const DEFAULT_LIMIT = 5;
+const INTERNAL_LEXICAL_POOL_LIMIT = 15;
+const INTERNAL_SEMANTIC_POOL_LIMIT = 15;
+const RRF_K = 20;
+const RRF_WEIGHT_LEXICAL = 1.2;
+const RRF_WEIGHT_SEMANTIC = 1;
 
 const FUSE_KEYS: IFuseOptions<SearchCandidate>["keys"] = [
   { name: "name", weight: 0.36 },
@@ -71,7 +91,7 @@ export async function runSearchCommand(
   query: string,
   options: SearchCliOptions,
   client: ConvexHttpClient,
-): Promise<void> {
+) {
   const normalizedQuery = query.trim();
 
   if (normalizedQuery.length === 0) {
@@ -90,12 +110,22 @@ export async function runSearchCommand(
     filters,
   });
   const limit = normalizeLimit(options.limit);
-  const strictResults = rankResults(candidates, normalizedQuery, limit, STRICT_FUSE_OPTIONS);
-  const strictResultCount = strictResults.length;
+  const strictDisplayResults = rankResults(candidates, normalizedQuery, limit, STRICT_FUSE_OPTIONS);
+  const strictResultCount = strictDisplayResults.length;
   const relaxed = options.relax === true;
-  const rankedResults = relaxed
-    ? rankResults(candidates, normalizedQuery, limit, RELAXED_FUSE_OPTIONS)
-    : strictResults;
+  const lexicalPool = rankResults(
+    candidates,
+    normalizedQuery,
+    INTERNAL_LEXICAL_POOL_LIMIT,
+    relaxed ? RELAXED_FUSE_OPTIONS : STRICT_FUSE_OPTIONS,
+  );
+  const semanticCandidates = await client.action(api.search.semanticSearch, {
+    query: normalizedQuery,
+    filters,
+    limit: INTERNAL_SEMANTIC_POOL_LIMIT,
+  });
+  const hybridResults = mergeHybridResults(lexicalPool, semanticCandidates).slice(0, limit);
+  const rankedResults = toSearchCandidates(hybridResults, candidates);
   const hydratedResults = await hydrateResults(rankedResults, client);
 
   if (options.json) {
@@ -155,6 +185,103 @@ function rankResults(
 
   const fuse = new Fuse(candidates, fuseOptions);
   return fuse.search(query, { limit }).map((result) => result.item);
+}
+
+function mergeHybridResults(
+  lexicalCandidates: SearchCandidate[],
+  semanticCandidates: SemanticCandidate[],
+) {
+  const lexicalRankById = new Map<string, number>();
+  for (const [index, candidate] of lexicalCandidates.entries()) {
+    lexicalRankById.set(candidate.id, index + 1);
+  }
+
+  const semanticRankById = new Map<string, number>();
+  for (const candidate of semanticCandidates) {
+    if (semanticRankById.has(candidate.componentId)) {
+      continue;
+    }
+    semanticRankById.set(candidate.componentId, candidate.semanticRank);
+  }
+
+  const mergedIds = new Set<string>([...lexicalRankById.keys(), ...semanticRankById.keys()]);
+  const merged: HybridMergedResult[] = [];
+
+  for (const id of mergedIds) {
+    const lexicalRank = lexicalRankById.get(id);
+    const semanticRank = semanticRankById.get(id);
+
+    let score = 0;
+    if (lexicalRank !== undefined) {
+      score += RRF_WEIGHT_LEXICAL / (RRF_K + lexicalRank);
+    }
+    if (semanticRank !== undefined) {
+      score += RRF_WEIGHT_SEMANTIC / (RRF_K + semanticRank);
+    }
+
+    let reason: HybridReason;
+    if (lexicalRank !== undefined && semanticRank !== undefined) {
+      reason = "both";
+    } else if (lexicalRank !== undefined) {
+      reason = "lexical";
+    } else {
+      reason = "semantic";
+    }
+
+    merged.push({
+      id,
+      reason,
+      score,
+      lexicalRank,
+      semanticRank,
+    });
+  }
+
+  return merged.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+
+    const leftBest = Math.min(
+      left.lexicalRank ?? Number.POSITIVE_INFINITY,
+      left.semanticRank ?? Number.POSITIVE_INFINITY,
+    );
+    const rightBest = Math.min(
+      right.lexicalRank ?? Number.POSITIVE_INFINITY,
+      right.semanticRank ?? Number.POSITIVE_INFINITY,
+    );
+    if (leftBest !== rightBest) {
+      return leftBest - rightBest;
+    }
+
+    const leftLexical = left.lexicalRank ?? Number.POSITIVE_INFINITY;
+    const rightLexical = right.lexicalRank ?? Number.POSITIVE_INFINITY;
+    if (leftLexical !== rightLexical) {
+      return leftLexical - rightLexical;
+    }
+
+    const leftSemantic = left.semanticRank ?? Number.POSITIVE_INFINITY;
+    const rightSemantic = right.semanticRank ?? Number.POSITIVE_INFINITY;
+    if (leftSemantic !== rightSemantic) {
+      return leftSemantic - rightSemantic;
+    }
+
+    return left.id.localeCompare(right.id, "en");
+  });
+}
+
+function toSearchCandidates(
+  hybridResults: HybridMergedResult[],
+  candidates: SearchCandidate[],
+): SearchCandidate[] {
+  if (hybridResults.length === 0) {
+    return [];
+  }
+
+  const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  return hybridResults
+    .map((result) => candidateById.get(result.id))
+    .filter((candidate): candidate is SearchCandidate => candidate !== undefined);
 }
 
 type SearchResult = SearchCandidate & {

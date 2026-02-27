@@ -1,19 +1,25 @@
 import type { ConvexHttpClient } from "convex/browser";
 import type { ComponentDocument, ComponentInstall } from "../../../../shared/component-schema";
 
-export type QueryCall = {
+export type MockCall = {
+  kind: "query" | "action";
   functionRef: unknown;
   args: unknown;
 };
 
 export function createMockClient<TResult>(
-  resolver: (call: QueryCall) => TResult | Promise<TResult>,
-): { client: ConvexHttpClient; calls: QueryCall[] } {
-  const calls: QueryCall[] = [];
+  resolver: (call: MockCall) => TResult | Promise<TResult>,
+): { client: ConvexHttpClient; calls: MockCall[] } {
+  const calls: MockCall[] = [];
 
   const client = {
     query: async (functionRef: unknown, args: unknown) => {
-      const call = { functionRef, args };
+      const call: MockCall = { kind: "query", functionRef, args };
+      calls.push(call);
+      return resolver(call);
+    },
+    action: async (functionRef: unknown, args: unknown) => {
+      const call: MockCall = { kind: "action", functionRef, args };
       calls.push(call);
       return resolver(call);
     },
