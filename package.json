@@ -48,7 +48,8 @@
     "data:reindex": "bun run --cwd apps/backend reindex:embeddings",
     "data:validate": "bun run --cwd apps/backend validate:data",
     "data:validate:json": "bun run --cwd apps/backend validate:data --json",
-    "data:check": "bun run data:pull && bun run data:validate"
+    "data:check": "bun run data:pull && bun run data:validate",
+    "eval:search": "bun run --cwd apps/cli eval:search"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

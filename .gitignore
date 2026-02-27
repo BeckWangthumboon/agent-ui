@@ -44,3 +44,6 @@ data
 !.agents/skills/component-data/
 !.agents/skills/convex-*/
 !.agents/skills/vercel-react-best-practices
+
+#config file
+.agents/agent-ui.json
