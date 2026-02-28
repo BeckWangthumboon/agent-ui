@@ -21,7 +21,7 @@ This app is a Vite SPA using TanStack Router (file-based routes), Tailwind CSS v
 
 ## Backend Integration
 
-- Set required env vars in `apps/web-view/.env.local`:
+- Set required env vars in `apps/web/.env.local`:
   - `VITE_CONVEX_URL` (typically the same as `CONVEX_URL` in `apps/backend/.env.local`)
   - `VITE_WORKOS_CLIENT_ID` (WorkOS client/application ID)
   - `VITE_WORKOS_REDIRECT_URI` (for example `http://localhost:5173/callback`)

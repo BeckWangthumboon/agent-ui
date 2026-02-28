@@ -10,7 +10,10 @@ import { env } from "./env";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AuthKitProvider clientId={env.VITE_WORKOS_CLIENT_ID} redirectUri={env.VITE_WORKOS_REDIRECT_URI}>
+    <AuthKitProvider
+      clientId={env.VITE_WORKOS_CLIENT_ID}
+      redirectUri={env.VITE_WORKOS_REDIRECT_URI}
+    >
       <ConvexProviderWithAuthKit client={convex} useAuth={useAuth}>
         <RouterProvider router={router} />
       </ConvexProviderWithAuthKit>

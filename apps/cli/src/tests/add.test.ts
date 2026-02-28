@@ -244,7 +244,7 @@ describe("runAddCommand", () => {
 
       const cwd = process.cwd();
       const rootDir = await mkdtemp(join(tmpdir(), "agent-ui-add-root-"));
-      const projectDir = join(rootDir, "apps", "web-view");
+      const projectDir = join(rootDir, "apps", "web");
       await mkdir(projectDir, { recursive: true });
       await writeFile(join(projectDir, "components.json"), "{}\n", "utf8");
 
