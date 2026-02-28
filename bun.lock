@@ -32,6 +32,9 @@
     },
     "apps/cli": {
       "name": "@agent-ui/cli",
+      "dependencies": {
+        "@workos-inc/node": "^8.0.0",
+      },
     },
     "apps/web": {
       "name": "@agent-ui/web",

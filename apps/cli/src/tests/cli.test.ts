@@ -34,6 +34,9 @@ describe("cli command wiring", () => {
     const stdout = decoder.decode(result.stdout);
     expect(stdout).toContain("view|v [options] <id>");
     expect(stdout).toContain("add [options] <id>");
+    expect(stdout).toContain("login");
+    expect(stdout).toContain("status");
+    expect(stdout).toContain("logout");
   });
 
   it("shows --project-dir and does not show --init-if-missing in add help output", () => {

@@ -18,6 +18,10 @@ import {
   parsePackageManager,
 } from "./config.js";
 import { CLI_NAME } from "./constants.js";
+import { runLoginCommand, runLogoutCommand, runStatusCommand } from "./auth/commands.js";
+import { requireConvexUrl } from "./auth/config.js";
+import { createAuthStorage } from "./auth/storage.js";
+import { loadValidStoredSession } from "./auth/refresh.js";
 
 const program = new Command();
 
@@ -26,6 +30,42 @@ program
   .description("Search component metadata via Convex + Fuse")
   .showHelpAfterError()
   .option("--config <path>", "Path to agent-ui config file");
+
+program
+  .command("login")
+  .description("Authenticate the CLI with WorkOS using a PKCE copy-paste flow")
+  .action(async () => {
+    try {
+      await runLoginCommand();
+    } catch (error) {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("status")
+  .description("Show the stored WorkOS session, if one exists")
+  .action(async () => {
+    try {
+      await runStatusCommand();
+    } catch (error) {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("logout")
+  .description("Clear the stored WorkOS session")
+  .action(async () => {
+    try {
+      await runLogoutCommand();
+    } catch (error) {
+      console.error(errorMessage(error));
+      process.exitCode = 1;
+    }
+  });
 
 program
   .command("search")
@@ -58,7 +98,7 @@ program
       return;
     }
 
-    const client = createClient();
+    const client = await createClient();
     if (!client) {
       return;
     }
@@ -76,7 +116,7 @@ program
   .option("--example", "Print canonical usage example")
   .option("--json", "Output JSON")
   .action(async (id: string, options: ViewCliOptions) => {
-    const client = createClient();
+    const client = await createClient();
     if (!client) {
       return;
     }
@@ -113,7 +153,7 @@ program
 
     const mergedOptions = mergeAddOptions(options, loadedConfig);
 
-    const client = createClient();
+    const client = await createClient();
     if (!client) {
       return;
     }
@@ -123,15 +163,32 @@ program
 
 await program.parseAsync(process.argv);
 
-function createClient(): ConvexHttpClient | null {
-  const convexUrl = process.env.CONVEX_URL;
-  if (!convexUrl) {
-    console.error("CONVEX_URL is required.");
+async function createClient(): Promise<ConvexHttpClient | null> {
+  let convexUrl: string;
+  try {
+    convexUrl = requireConvexUrl();
+  } catch (error) {
+    console.error(errorMessage(error));
     process.exitCode = 1;
     return null;
   }
 
-  return new ConvexHttpClient(convexUrl);
+  const client = new ConvexHttpClient(convexUrl);
+
+  try {
+    const storage = await createAuthStorage();
+    const ensuredSession = await loadValidStoredSession(storage);
+
+    if (ensuredSession?.session) {
+      client.setAuth(ensuredSession.session.accessToken);
+    }
+  } catch (error) {
+    console.error(
+      `Stored WorkOS session could not be used; continuing unauthenticated. ${errorMessage(error)}`,
+    );
+  }
+
+  return client;
 }
 
 function errorMessage(error: unknown): string {

@@ -53,20 +53,44 @@ export async function readJson<T = unknown>(path: string) {
   }
 }
 
-export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+export type AtomicWriteOptions = {
+  mode?: number;
+};
+
+export async function writeTextAtomic(
+  path: string,
+  value: string,
+  options: AtomicWriteOptions = {},
+): Promise<void> {
   const parentDir = dirname(path);
   const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
-  const serialized = `${JSON.stringify(value, null, 2)}\n`;
 
   await ensureDir(parentDir);
 
   try {
-    await writeFile(tempPath, serialized, "utf8");
+    await writeFile(tempPath, value, {
+      encoding: "utf8",
+      mode: options.mode,
+    });
     await rename(tempPath, path);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => {
       // Ignore temp cleanup failures.
     });
+    throw withCause(`Failed to write file '${path}': ${messageFromError(error)}`, error);
+  }
+}
+
+export async function writeJsonAtomic(
+  path: string,
+  value: unknown,
+  options: AtomicWriteOptions = {},
+): Promise<void> {
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+
+  try {
+    await writeTextAtomic(path, serialized, options);
+  } catch (error) {
     throw withCause(`Failed to write JSON file '${path}': ${messageFromError(error)}`, error);
   }
 }
