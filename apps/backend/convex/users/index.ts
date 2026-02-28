@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
-import { action, internalMutation, internalQuery, query } from "../_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import type { WorkosUserFetchResult } from "./workos";
 
 type User = Doc<"users">;
@@ -12,6 +12,16 @@ type UserUpsertData = {
   lastName?: string;
   profilePictureUrl?: string;
 };
+
+type UserProfileUpdateData = {
+  firstName?: string;
+  lastName?: string;
+};
+
+function normalizeUserProfileField(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
 
 function getChangedUserFields(existing: User, next: UserUpsertData) {
   const changed: Partial<UserUpsertData> = {};
@@ -26,6 +36,17 @@ function getChangedUserFields(existing: User, next: UserUpsertData) {
   }
   if ((existing.profilePictureUrl ?? undefined) !== (next.profilePictureUrl ?? undefined)) {
     changed.profilePictureUrl = next.profilePictureUrl;
+  }
+  return changed;
+}
+
+function getChangedUserProfileFields(existing: User, next: UserProfileUpdateData) {
+  const changed: Partial<UserProfileUpdateData> = {};
+  if ((existing.firstName ?? undefined) !== next.firstName) {
+    changed.firstName = next.firstName;
+  }
+  if ((existing.lastName ?? undefined) !== next.lastName) {
+    changed.lastName = next.lastName;
   }
   return changed;
 }
@@ -75,6 +96,49 @@ export const ensureAccount = action({
       authId,
       userData: workosResult.userData,
     });
+  },
+});
+
+export const updateCurrentUser = mutation({
+  args: {
+    firstName: v.optional(v.union(v.string(), v.null())),
+    lastName: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated.");
+    }
+
+    const currentUser = await ctx.db
+      .query("users")
+      .withIndex("by_authId", (q) => q.eq("authId", identity.subject))
+      .unique();
+
+    if (!currentUser) {
+      throw new Error("Authenticated user record not found.");
+    }
+
+    const changedFields = getChangedUserProfileFields(currentUser, {
+      firstName: normalizeUserProfileField(args.firstName),
+      lastName: normalizeUserProfileField(args.lastName),
+    });
+
+    if (Object.keys(changedFields).length === 0) {
+      return currentUser;
+    }
+
+    const updatedAt = Date.now();
+    await ctx.db.patch(currentUser._id, {
+      ...changedFields,
+      updatedAt,
+    });
+
+    return {
+      ...currentUser,
+      ...changedFields,
+      updatedAt,
+    };
   },
 });
 
