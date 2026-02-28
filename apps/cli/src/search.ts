@@ -24,6 +24,7 @@ export type SearchCliOptions = {
   primitiveLibrary?: ComponentPrimitiveLibrary[];
   relax?: boolean;
   json?: boolean;
+  debug?: boolean;
 };
 
 type SearchCandidate = Pick<
@@ -51,9 +52,11 @@ type HybridReason = "lexical" | "semantic" | "both";
 type HybridMergedResult = {
   id: string;
   reason: HybridReason;
-  score: number;
+  rrfScore: number;
   lexicalRank?: number;
   semanticRank?: number;
+  lexicalRrfTerm?: number;
+  semanticRrfTerm?: number;
 };
 
 const DEFAULT_LIMIT = 5;
@@ -113,6 +116,7 @@ export async function runSearchCommand(
   const strictDisplayResults = rankResults(candidates, normalizedQuery, limit, STRICT_FUSE_OPTIONS);
   const strictResultCount = strictDisplayResults.length;
   const relaxed = options.relax === true;
+  const debug = options.debug === true;
   const lexicalPool = rankResults(
     candidates,
     normalizedQuery,
@@ -125,8 +129,8 @@ export async function runSearchCommand(
     limit: INTERNAL_SEMANTIC_POOL_LIMIT,
   });
   const hybridResults = mergeHybridResults(lexicalPool, semanticCandidates).slice(0, limit);
-  const rankedResults = toSearchCandidates(hybridResults, candidates);
-  const hydratedResults = await hydrateResults(rankedResults, client);
+  const rankedResults = toRankedResults(hybridResults, candidates);
+  const hydratedResults = await hydrateResults(rankedResults, client, debug);
 
   if (options.json) {
     console.log(
@@ -167,7 +171,7 @@ export async function runSearchCommand(
     return;
   }
 
-  printSearchResults(hydratedResults);
+  printSearchResults(hydratedResults, debug);
   if (relaxed) {
     console.log("Tip: refine with --framework/--styling/--motion for higher precision.");
   }
@@ -211,13 +215,11 @@ function mergeHybridResults(
     const lexicalRank = lexicalRankById.get(id);
     const semanticRank = semanticRankById.get(id);
 
-    let score = 0;
-    if (lexicalRank !== undefined) {
-      score += RRF_WEIGHT_LEXICAL / (RRF_K + lexicalRank);
-    }
-    if (semanticRank !== undefined) {
-      score += RRF_WEIGHT_SEMANTIC / (RRF_K + semanticRank);
-    }
+    const lexicalRrfTerm =
+      lexicalRank !== undefined ? RRF_WEIGHT_LEXICAL / (RRF_K + lexicalRank) : undefined;
+    const semanticRrfTerm =
+      semanticRank !== undefined ? RRF_WEIGHT_SEMANTIC / (RRF_K + semanticRank) : undefined;
+    const rrfScore = (lexicalRrfTerm ?? 0) + (semanticRrfTerm ?? 0);
 
     let reason: HybridReason;
     if (lexicalRank !== undefined && semanticRank !== undefined) {
@@ -231,15 +233,17 @@ function mergeHybridResults(
     merged.push({
       id,
       reason,
-      score,
+      rrfScore,
       lexicalRank,
       semanticRank,
+      lexicalRrfTerm,
+      semanticRrfTerm,
     });
   }
 
   return merged.sort((left, right) => {
-    if (right.score !== left.score) {
-      return right.score - left.score;
+    if (right.rrfScore !== left.rrfScore) {
+      return right.rrfScore - left.rrfScore;
     }
 
     const leftBest = Math.min(
@@ -270,23 +274,45 @@ function mergeHybridResults(
   });
 }
 
-function toSearchCandidates(
-  hybridResults: HybridMergedResult[],
-  candidates: SearchCandidate[],
-): SearchCandidate[] {
+type RankedSearchResult = {
+  candidate: SearchCandidate;
+  hybrid: HybridMergedResult;
+};
+
+function toRankedResults(hybridResults: HybridMergedResult[], candidates: SearchCandidate[]) {
   if (hybridResults.length === 0) {
     return [];
   }
 
   const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   return hybridResults
-    .map((result) => candidateById.get(result.id))
-    .filter((candidate): candidate is SearchCandidate => candidate !== undefined);
+    .map((hybrid) => {
+      const candidate = candidateById.get(hybrid.id);
+      if (!candidate) {
+        return null;
+      }
+
+      return { candidate, hybrid };
+    })
+    .filter((result): result is RankedSearchResult => result !== null);
 }
+
+type SearchDebugInfo = {
+  reason: HybridReason;
+  rrfScore: number;
+  lexicalRank?: number;
+  semanticRank?: number;
+  lexicalRrfTerm?: number;
+  semanticRrfTerm?: number;
+  k: number;
+  lexicalWeight: number;
+  semanticWeight: number;
+};
 
 type SearchResult = SearchCandidate & {
   source: ComponentDocument["source"];
   dependencies: ComponentDocument["dependencies"];
+  debug?: SearchDebugInfo;
 };
 
 type SearchMetadata = {
@@ -296,15 +322,16 @@ type SearchMetadata = {
 };
 
 async function hydrateResults(
-  results: SearchCandidate[],
+  results: RankedSearchResult[],
   client: ConvexHttpClient,
+  includeDebug: boolean,
 ): Promise<SearchResult[]> {
   if (results.length === 0) {
     return [];
   }
 
   const metadata = await client.query(api.components.getMetadataByIds, {
-    ids: results.map((result) => result.id),
+    ids: results.map((result) => result.candidate.id),
   });
   const typedMetadata = metadata as SearchMetadata[];
   const metadataById = new Map(
@@ -312,16 +339,31 @@ async function hydrateResults(
   );
 
   return results.map((result) => {
-    const component = metadataById.get(result.id);
+    const component = metadataById.get(result.candidate.id);
     return {
-      ...result,
+      ...result.candidate,
       source: component?.source ?? { url: "unknown" },
       dependencies: component?.dependencies ?? [],
+      debug: includeDebug ? toDebugInfo(result.hybrid) : undefined,
     };
   });
 }
 
-function printSearchResults(results: SearchResult[]): void {
+function toDebugInfo(result: HybridMergedResult): SearchDebugInfo {
+  return {
+    reason: result.reason,
+    rrfScore: result.rrfScore,
+    lexicalRank: result.lexicalRank,
+    semanticRank: result.semanticRank,
+    lexicalRrfTerm: result.lexicalRrfTerm,
+    semanticRrfTerm: result.semanticRrfTerm,
+    k: RRF_K,
+    lexicalWeight: RRF_WEIGHT_LEXICAL,
+    semanticWeight: RRF_WEIGHT_SEMANTIC,
+  };
+}
+
+function printSearchResults(results: SearchResult[], includeDebug: boolean): void {
   for (const [index, result] of results.entries()) {
     console.log(`${index + 1}. ${result.name} (${result.id})`);
     console.log(
@@ -342,6 +384,16 @@ function printSearchResults(results: SearchResult[]): void {
 
     console.log(`   source: ${result.source.url}`);
     console.log(`   intent: ${result.intent}`);
+
+    if (includeDebug && result.debug) {
+      const lexicalRank = result.debug.lexicalRank ?? "-";
+      const semanticRank = result.debug.semanticRank ?? "-";
+      const lexicalTerm = result.debug.lexicalRrfTerm?.toFixed(6) ?? "0.000000";
+      const semanticTerm = result.debug.semanticRrfTerm?.toFixed(6) ?? "0.000000";
+      console.log(
+        `   debug: reason=${result.debug.reason} | lexRank=${lexicalRank} | semRank=${semanticRank} | lexTerm=${lexicalTerm} | semTerm=${semanticTerm} | rrf=${result.debug.rrfScore.toFixed(6)}`,
+      );
+    }
   }
 }
 

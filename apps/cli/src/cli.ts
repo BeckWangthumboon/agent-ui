@@ -41,6 +41,7 @@ program
     collectPrimitiveLibrary,
   )
   .option("--relax", "Use relaxed ranking to show best-effort matches")
+  .option("--debug", "Include ranking diagnostics in output")
   .option("--json", "Output JSON")
   .action(async (query: string, options: SearchCliOptions, command: Command) => {
     const globalOptions = command.optsWithGlobals<{ config?: string }>();

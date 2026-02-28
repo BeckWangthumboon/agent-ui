@@ -132,6 +132,7 @@ export function mergeSearchOptions(
     primitiveLibrary: cliOptions.primitiveLibrary ?? searchDefaults?.primitiveLibrary,
     relax: cliOptions.relax,
     json: cliOptions.json ?? searchDefaults?.json,
+    ...(cliOptions.debug !== undefined ? { debug: cliOptions.debug } : {}),
   };
 }
 

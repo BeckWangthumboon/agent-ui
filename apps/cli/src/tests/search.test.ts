@@ -156,6 +156,53 @@ describe("runSearchCommand", () => {
     expect(payload.results[0].reason).toBeUndefined();
   });
 
+  it("includes debug ranking fields in --json mode when --debug is enabled", async () => {
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    const { client } = createMockClient(
+      createSearchResolver({
+        candidates: [candidate],
+        semantic: [{ componentId: candidate.id, semanticRank: 1 }],
+        metadata: [metadata],
+      }),
+    );
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand("button", { limit: 5, json: true, debug: true }, client);
+    });
+
+    const payload = JSON.parse(output.logs[0] ?? "{}");
+    expect(payload.results[0].debug.reason).toBe("both");
+    expect(payload.results[0].debug.lexicalRank).toBe(1);
+    expect(payload.results[0].debug.semanticRank).toBe(1);
+    expect(payload.results[0].debug.lexicalRrfTerm).toBeCloseTo(1.2 / 21, 6);
+    expect(payload.results[0].debug.semanticRrfTerm).toBeCloseTo(1 / 21, 6);
+    expect(payload.results[0].debug.rrfScore).toBeCloseTo(2.2 / 21, 6);
+    expect(payload.results[0].debug.k).toBe(20);
+    expect(payload.results[0].debug.lexicalWeight).toBe(1.2);
+    expect(payload.results[0].debug.semanticWeight).toBe(1);
+  });
+
+  it("prints debug diagnostics in text mode when --debug is enabled", async () => {
+    const candidate = createSampleSearchCandidate();
+    const metadata = createSampleComponentMetadata();
+    const { client } = createMockClient(
+      createSearchResolver({
+        candidates: [candidate],
+        semantic: [{ componentId: candidate.id, semanticRank: 1 }],
+        metadata: [metadata],
+      }),
+    );
+
+    const output = await captureCommandOutput(async () => {
+      await runSearchCommand("button", { limit: 5, debug: true }, client);
+    });
+
+    expect(output.logs.join("\n")).toContain(
+      "debug: reason=both | lexRank=1 | semRank=1 | lexTerm=",
+    );
+  });
+
   it("prints strict miss guidance with catalog coverage hint", async () => {
     const candidate = createSampleSearchCandidate();
     const { client, calls } = createMockClient(

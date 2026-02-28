@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "eval:search": "bun run src/eval-search.ts",
+    "eval:search": "bun run src/evalSearch.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test"
   }
