@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@convex-dev/workos": "^0.0.1",
-    "@t3-oss/env-core": "^0.13.10",
     "@radix-ui/react-slot": "^1.2.4",
+    "@t3-oss/env-core": "^0.13.10",
     "@tanstack/react-router": "^1.161.3",
     "@tanstack/react-router-devtools": "^1.161.3",
     "@workos-inc/authkit-react": "^0.16.0",

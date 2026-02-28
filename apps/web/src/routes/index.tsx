@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, Settings2, Square } from "lucide-react";
+import { ArrowRight, Settings2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,6 @@ const dashboardCards = [
     description: "Adjust profile details and preferences.",
     to: "/settings",
     icon: Settings2,
-  },
-  {
-    title: "Third Page",
-    description: "An empty placeholder page for now.",
-    to: "/third",
-    icon: Square,
   },
 ] as const;
 
@@ -36,9 +30,6 @@ function DashboardPage() {
         <div className="mt-4 flex gap-3">
           <Button asChild>
             <Link to="/settings">Open settings</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link to="/third">Open third page</Link>
           </Button>
         </div>
       </section>
