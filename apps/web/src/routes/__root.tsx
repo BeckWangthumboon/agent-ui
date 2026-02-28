@@ -1,13 +1,13 @@
 import { Link, Outlet, createRootRoute, useRouterState } from "@tanstack/react-router";
-import { LayoutGrid, ReceiptText, Settings2 } from "lucide-react";
+import { LayoutGrid, Settings2, Square } from "lucide-react";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { cn } from "@/lib/utils";
 
 const navLinks = [
   { to: "/", label: "Dashboard", icon: LayoutGrid },
-  { to: "/workspace", label: "Workspace", icon: ReceiptText },
   { to: "/settings", label: "Settings", icon: Settings2 },
+  { to: "/third", label: "Third", icon: Square },
 ] as const;
 
 export const Route = createRootRoute({
