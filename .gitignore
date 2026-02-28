@@ -20,7 +20,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.development.local
 .env.test.local
 .env.production.local
-.env.local
+
 
 # caches
 .eslintcache
@@ -39,6 +39,7 @@ data/
 data
 # ignore all skills by default
 .agents/skills/*
+.claude
 
 # allow specific skills
 !.agents/skills/component-ingest/
