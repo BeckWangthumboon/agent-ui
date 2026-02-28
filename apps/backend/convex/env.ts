@@ -36,3 +36,7 @@ export function assertWorkosClientIdConfigured() {
 export function getWorkosApiKey(): string {
   return requireEnv("WORKOS_API_KEY");
 }
+
+export function getWorkosWebhookSecret(): string {
+  return requireEnv("WORKOS_WEBHOOK_SECRET");
+}

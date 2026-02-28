@@ -137,3 +137,20 @@ export const upsertUserFromWorkosInternal = internalMutation({
     };
   },
 });
+
+export const deleteUserByAuthIdInternal = internalMutation({
+  args: { authId: v.string() },
+  handler: async (ctx, args) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_authId", (q) => q.eq("authId", args.authId))
+      .unique();
+
+    if (!existingUser) {
+      return null;
+    }
+
+    await ctx.db.delete(existingUser._id);
+    return null;
+  },
+});
